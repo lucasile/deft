@@ -1,0 +1,2 @@
+description = "Load project context and confirm current task"
+prompt = "Read GEMINI.md and CURRENT.md. Summarize the project in 2-3 sentences, then tell me exactly what the current task is. Ask if I'm ready to begin."
