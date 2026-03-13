@@ -4,6 +4,8 @@
 
 Deft is an open source panel for managing game servers and Docker applications across multiple nodes. Install the agent on any Linux server with one command — it connects back to your panel automatically. No open ports, no manual configuration, no 48-hour setup guides.
 
+> ⚠️ Deft is in early development and not yet ready for production use.
+
 ---
 
 ## How it works
@@ -19,24 +21,6 @@ your-game-server-3          # agent installed, zero inbound ports
 ```
 
 The agent connects *outward* to the panel — not the other way around. This means your game server nodes need no open inbound ports and work behind NAT out of the box.
-
----
-
-## Getting started
-
-**Install the panel** (one server, runs once):
-
-```bash
-curl -fsSL https://get.deft.sh/panel | sudo sh
-```
-
-**Add a node** (run on each game server):
-
-```bash
-curl -fsSL https://get.deft.sh/agent | sudo sh
-```
-
-The node appears in your panel within seconds. Approve it, set resource limits, pick a game template, and your server is running.
 
 ---
 
@@ -66,6 +50,7 @@ Deft is designed to run entirely on your own infrastructure. The panel requires 
 
 **Minimum requirements:**
 
+[!NOTE]
 | Component | Minimum |
 |-----------|---------|
 | Panel server | 1 vCPU, 512MB RAM, Ubuntu 22.04+ |
@@ -100,7 +85,7 @@ See [SECURITY.md](SECURITY.md) for the full threat model and how to report vulne
 
 ## Contributing
 
-Deft is in early development. Contributions are very welcome.
+Contributions are very welcome. Deft is in early development — the best way to help right now is building out the agent core.
 
 ```bash
 git clone https://github.com/lucasile/deft
