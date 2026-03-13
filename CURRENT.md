@@ -9,20 +9,19 @@
 - [x] Root-level `Makefile` and `go.work` — unified build system for all modules.
 - [x] Support for Go 1.26.1 and i18n (EN/RO).
 - [x] Implement `agent/docker/client.go` — Docker daemon connection and version negotiation.
+- [x] Implement `agent/docker/container.go` — Container lifecycle (create, start, stop, remove).
+- [x] Implement `agent/docker/console.go` — Generic log streaming and command stdin.
 
 ## Current Task
-**Implement `agent/docker/container.go`**
+**Implement `agent/docker/stats.go`**
 
-The container management should:
-1. Implement a method to create a container from a given image and configuration.
-2. Implement methods to start, stop, and delete containers.
-3. Handle error cases gracefully (e.g., container already exists/stopped).
+The stats management should:
+1. Implement a method to stream real-time resource usage (CPU, Memory, Network, Disk I/O) for a specific container.
+2. Return a channel or stream that the agent can eventually send back to the panel.
 
 ## Next Tasks (do not start yet)
-1. `agent/docker/console.go` — stream container stdout/stderr
-2. `agent/docker/stats.go` — resource usage per container
-3. `agent/tunnel/connection.go` — outbound gRPC to panel
-4. `agent/tunnel/handler.go` — dispatch incoming commands
+1. `agent/tunnel/connection.go` — outbound gRPC to panel
+2. `agent/tunnel/handler.go` — dispatch incoming commands
 
 ## Blockers / Notes
 - None yet
