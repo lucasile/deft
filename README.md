@@ -78,6 +78,7 @@ The panel and agent are both single static binaries with no runtime dependencies
 The agent runs with a hardcoded command allowlist — it cannot execute arbitrary commands on the host OS, access files outside its data directory, or escalate privileges. Every instruction from the panel is logged locally on the node.
 
 If you self-host the panel, we have zero access to your nodes. Zero.
+If you don't, we still have zero access to your nodes. Zero.
 
 See [SECURITY.md](SECURITY.md) for the full threat model and how to report vulnerabilities.
 
