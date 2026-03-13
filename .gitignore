@@ -4,6 +4,12 @@ bin/
 # Go
 *.test
 *.out
+go.work
+go.work.sum
+
+# Temporary installation files
+deft.tmp
+deft
 
 # Gemini
 .gemini/checkpoint*
