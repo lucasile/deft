@@ -76,14 +76,53 @@ North star: install panel, add a node, have a running Minecraft server in under 
 | Logging | Zerolog |
 | Auth | JWT |
 | HTTP router | chi |
-| Container management | `https://github.com/moby/moby` |
+| Container management | `github.com/docker/docker/client` |
 | Init system | systemd |
 
 ### Critical Package Notes
 
 - Use `modernc.org/sqlite` NOT `mattn/go-sqlite3` — pure Go, no CGO, required for single static binary
 - SvelteKit runs in SPA/static mode only — no SSR, no Node.js server
-- Docker API via `https://github.com/moby/moby` only — never shell out to docker CLI
+- Docker client import path is `github.com/docker/docker/client` — the Go module path does NOT change even though the GitHub source repo lives at github.com/moby/moby
+- Never shell out to the docker CLI — always use the Docker API via the client package
+
+### Docker Client Usage
+
+```go
+// Install
+// go get github.com/docker/docker@latest
+
+// Import
+import "github.com/docker/docker/client"
+
+// Create client (reads DOCKER_HOST env or defaults to /var/run/docker.sock)
+cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+if err != nil {
+    return fmt.Errorf("failed to create docker client: %w", err)
+}
+defer cli.Close()
+
+// List containers
+containers, err := cli.ContainerList(ctx, container.ListOptions{All: true})
+
+// Start container
+err = cli.ContainerStart(ctx, containerID, container.StartOptions{})
+
+// Stop container
+timeout := 10
+err = cli.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout})
+
+// Stream logs
+logs, err := cli.ContainerLogs(ctx, containerID, container.LogsOptions{
+    ShowStdout: true,
+    ShowStderr: true,
+    Follow:     true,
+    Timestamps: false,
+})
+
+// Docs: https://pkg.go.dev/github.com/docker/docker/client
+// Source: https://github.com/moby/moby (module path stays github.com/docker/docker)
+```
 
 ---
 
@@ -129,7 +168,7 @@ deft/
 ├── go.work                 # Go workspace
 ├── GEMINI.md               # This file — permanent context
 ├── CURRENT.md              # Current task and progress — update frequently
-└── LICENSE                 # MIT
+└── LICENSE                 # AGPL-3.0
 ```
 
 ---
