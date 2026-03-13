@@ -48,3 +48,5 @@ require (
 )
 
 replace github.com/lucasile/deft/internal/i18n => ../internal/i18n
+
+replace github.com/lucasile/deft/proto => ../proto
