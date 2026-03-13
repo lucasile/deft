@@ -13,17 +13,12 @@
 - [x] Implement `agent/docker/console/` — Generic log streaming and command stdin.
 - [x] Implement `agent/docker/stats/` — Real-time resource usage streaming.
 - [x] Implement `agent/tunnel/connection.go` — Bidirectional gRPC stream with mTLS and backoff.
-
-## Current Task
-**Implement `agent/tunnel/handler.go`**
-
-The command handler should:
-1. Dispatch incoming `PanelCommand` messages to the corresponding Docker functions (Create, Start, Stop, Remove).
-2. Send back a `CommandResult` to the panel via the gRPC stream to indicate success or failure.
-3. Handle context cancellation correctly.
+- [x] Implement `agent/tunnel/handler.go` — Command dispatching and result reporting.
+- [x] Wire everything together in the `serve` command.
 
 ## Next Tasks (do not start yet)
-1. `agent/main.go` — Wire everything together in the `serve` command.
+1. Phase 2: Panel MVP (Node.js/SvelteKit)
+2. Agent Join Token flow (Bootstrap API)
 
 ## Blockers / Notes
 - None yet
