@@ -76,14 +76,14 @@ North star: install panel, add a node, have a running Minecraft server in under 
 | Logging | Zerolog |
 | Auth | JWT |
 | HTTP router | chi |
-| Container management | `github.com/docker/docker/client` |
+| Container management | `https://github.com/moby/moby` |
 | Init system | systemd |
 
 ### Critical Package Notes
 
 - Use `modernc.org/sqlite` NOT `mattn/go-sqlite3` — pure Go, no CGO, required for single static binary
 - SvelteKit runs in SPA/static mode only — no SSR, no Node.js server
-- Docker API via `github.com/docker/docker/client` only — never shell out to docker CLI
+- Docker API via `https://github.com/moby/moby` only — never shell out to docker CLI
 
 ---
 
