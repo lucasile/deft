@@ -3,31 +3,26 @@
 ## Status: Phase 1 — Agent MVP
 
 ## What's Done
-- [ ] Nothing yet — project just initialized
+- [x] Implement `agent` and `installer` separation — clean division between setup tool and service.
+- [x] Implement `installer` — interactive (lang/mode), sudo elevation, agent download/install, systemd setup.
+- [x] Implement `agent` — `serve` and `uninstall` commands.
+- [x] Root-level `Makefile` and `go.work` — unified build system for all modules.
+- [x] Support for Go 1.26.1 and i18n (EN/RO).
 
 ## Current Task
-**Implement `agent/cmd/install.go`**
+**Implement `agent/docker/client.go`**
 
-The install command should:
-1. Check it's running as root (exit with clear error if not)
-2. Check Docker is installed (and optionally install it if missing)
-3. Find own binary path via `os.Executable()`
-4. Copy binary to `/usr/local/bin/deft-agent`
-5. Create config directory `/etc/deft/` and data directory `/var/lib/deft/volumes/`
-6. Write systemd service file to `/etc/systemd/system/deft-agent.service`
-7. Run `systemctl daemon-reload`
-8. Run `systemctl enable deft-agent`
-9. Run `systemctl start deft-agent`
-10. Print success message with next steps
+The Docker client should:
+1. Initialize a connection to the Docker daemon via the Unix socket (`/var/run/docker.sock`).
+2. Provide a wrapper to check the connection status.
+3. Handle API version negotiation.
 
 ## Next Tasks (do not start yet)
-1. `agent/cmd/uninstall.go` — reverse of install, clean removal
-2. `agent/docker/client.go` — connect to Docker socket
-3. `agent/docker/container.go` — create/start/stop/delete containers
-4. `agent/docker/console.go` — stream container stdout/stderr
-5. `agent/docker/stats.go` — resource usage per container
-6. `agent/tunnel/connection.go` — outbound gRPC to panel
-7. `agent/tunnel/handler.go` — dispatch incoming commands
+1. `agent/docker/container.go` — create/start/stop/delete containers
+2. `agent/docker/console.go` — stream container stdout/stderr
+3. `agent/docker/stats.go` — resource usage per container
+4. `agent/tunnel/connection.go` — outbound gRPC to panel
+5. `agent/tunnel/handler.go` — dispatch incoming commands
 
 ## Blockers / Notes
 - None yet
