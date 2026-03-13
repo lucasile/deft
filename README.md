@@ -1,4 +1,4 @@
-# deft
+# deft [README DEPRECATED WIP]
 
 **Server management that gets out of your way.**
 
