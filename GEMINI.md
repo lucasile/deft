@@ -30,7 +30,7 @@ North star: install panel, add a node, have a running Minecraft server in under 
 ```
 [Browser]
     ↕ HTTPS + WebSocket
-[Panel — SvelteKit SPA + API (Non-Go)]
+[Panel — Go binary with embedded SvelteKit static frontend]
     ↕ gRPC over mutual TLS (agent connects OUTBOUND)
 [Agent — Go binary on node]
     ↕ Unix socket (/var/run/docker.sock)
@@ -71,7 +71,8 @@ North star: install panel, add a node, have a running Minecraft server in under 
 | Layer | Technology |
 |---|---|
 | Agent backend | Go 1.26+ |
-| Panel frontend | SvelteKit (SPA mode) + Tailwind CSS |
+| Panel backend | Go 1.26+ |
+| Panel frontend | SvelteKit (Static mode) + Tailwind CSS |
 | Agent-Panel protocol | gRPC + Protocol Buffers |
 | CLI | Cobra |
 | Logging | Zerolog |
@@ -104,10 +105,10 @@ deft/
 │   └── templates/          # deft.service
 ├── internal/
 │   └── i18n/               # Shared localization (JSON + Embed)
-├── panel/                  # Panel (Non-Go)
+├── panel/                  # Go panel binary
 ├── proto/                  # gRPC definitions
 ├── go.work                 # (Ignored) local workspace
-└── Makefile                # Unified build system (make agent, make installer)
+└── Makefile                # Unified build system (make agent, make installer, make panel)
 ```
 
 ---
@@ -137,7 +138,8 @@ deft/
 ```bash
 make agent      # Builds agent to bin/deft
 make installer  # Builds installer to bin/deft-install
-make all        # Builds both
+make panel      # Builds panel to bin/deft-panel
+make all        # Builds all
 ```
 
 ---
