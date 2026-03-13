@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	"github.com/lucasile/deft/internal/i18n"
 	"github.com/manifoldco/promptui"
@@ -96,9 +97,8 @@ func main() {
 	}
 
 	if installPanel {
-		httpPort := promptDefault("Enter Panel Web Port", "3000")
-		grpcPort := promptDefault("Enter Agent gRPC Port", "50051")
-		runPanelInstall(httpPort, grpcPort)
+		httpPort := strings.TrimSpace(promptDefault("Enter Panel Web Port", "3000"))
+		runPanelInstall(httpPort, "50051")
 	}
 
 	fmt.Printf("\n%s\n", i18n.T("Success", nil))
@@ -162,6 +162,10 @@ func runPanelInstall(httpPort, grpcPort string) {
 	if err := runCommand("docker", "pull", image); err != nil {
 		log.Warn().Err(err).Msg("Failed to pull remote image, checking for local image...")
 	}
+
+	// Cleanup existing panel if it exists
+	_ = runCommandQuiet("docker", "stop", "deft-panel")
+	_ = runCommandQuiet("docker", "rm", "deft-panel")
 
 	err := runCommand("docker", "run", "-d",
 		"--name", "deft-panel",

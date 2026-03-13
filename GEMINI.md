@@ -29,40 +29,40 @@ North star: install panel, add a node, have a running Minecraft server in under 
 
 ```
 [Browser]
-    ↕ HTTPS + WebSocket
+    ↕ HTTPS + WebSocket (handled by Caddy/Nginx in production)
 [Panel — Go binary with embedded SvelteKit static frontend]
     ↕ gRPC over mutual TLS (agent connects OUTBOUND)
-[Agent — Go binary on node]
+[Agent Daemon (deftd) — Go binary on node]
     ↕ Unix socket (/var/run/docker.sock)
 [Docker Engine]
     ↕
 [Game Server Containers]
 ```
 
-### Agent
+### Agent (Daemon)
 
-- Single static Go binary (`deft`), zero runtime dependencies, no CGO
+- Single static Go binary (`deftd`), zero runtime dependencies, no CGO
 - Managed by systemd as a background service (`deft.service`)
 - Command allowlist is hardcoded — cannot execute arbitrary host OS commands
 - File operations strictly scoped to `/var/lib/deft/volumes/`
+
+### CLI (Universal Controller)
+
+- Single static Go binary (`deft`)
+- Namespaced commands: `deft agent ...` (controls daemon), `deft panel ...` (controls docker container)
 - Includes a `deft uninstall` command for clean removal
 
 ### Installer
 
 - Separate Go binary (`deft-install`)
-- Interactive setup: prompts for Language (EN/RO) and Mode (Default/Verbose)
+- Interactive setup: prompts for Language (EN/RO), Mode, and Components (Agent/Panel)
 - Automatically handles root elevation (sudo)
-- Downloads `deft` agent binary for the correct OS/Arch and installs it
+- Panel Installation: Pulls and runs the `deft-panel` Docker image with configurable ports
 
 ### Internal Tools
 
 - **i18n:** Shared `internal/i18n` package using embedded JSON files in `locales/`.
-
-### Communication
-
-- Protocol: gRPC bidirectional streaming
-- Security: mutual TLS — both sides verify certificates
-- Direction: agent calls out to panel, never the reverse
+- **Proto:** Shared `internal/proto` package for gRPC definitions.
 
 ---
 
@@ -72,21 +72,12 @@ North star: install panel, add a node, have a running Minecraft server in under 
 |---|---|
 | Agent backend | Go 1.26+ |
 | Panel backend | Go 1.26+ |
-| Panel frontend | SvelteKit (Static mode) + Tailwind CSS |
+| Panel frontend | Svelte 5 + SvelteKit (Static mode) + Tailwind CSS |
 | Agent-Panel protocol | gRPC + Protocol Buffers |
 | CLI | Cobra |
 | Logging | Zerolog |
 | Container management | `github.com/docker/docker/client` |
 | Init system | systemd |
-
-### Docker Client Usage
-
-```go
-import "github.com/docker/docker/client"
-
-// Create client with version negotiation
-cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-```
 
 ---
 
@@ -94,32 +85,19 @@ cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegoti
 
 ```
 deft/
-├── agent/                  # Go agent binary (deft)
-│   ├── main.go
-│   ├── cmd/                # serve, uninstall
-│   ├── docker/             # client, container, console, stats
-│   └── ...
-├── installer/              # Go installer binary (deft-install)
-│   ├── main.go
-│   ├── constants.go
-│   └── templates/          # deft.service
+├── cmd/
+│   ├── deft/               # Universal CLI tool
+│   ├── deftd/              # Agent daemon
+│   ├── deft-install/       # One-time installer
+│   └── deft-panel/         # Panel entry point
 ├── internal/
-│   └── i18n/               # Shared localization (JSON + Embed)
-├── panel/                  # Go panel binary
-├── proto/                  # gRPC definitions
-├── go.work                 # (Ignored) local workspace
-└── Makefile                # Unified build system (make agent, make installer, make panel)
-```
-
----
-
-## Agent Install Layout (On Node)
-
-```
-/usr/local/bin/deft             # the binary
-/etc/deft/                      # config and certs
-/var/lib/deft/volumes/          # game server data
-/etc/systemd/system/deft.service
+│   ├── agent/              # Core agent logic (Docker, Tunnel, Stats)
+│   ├── panel/              # Core panel logic (DB, API, gRPC Manager)
+│   ├── cli/                # Shared CLI command logic
+│   ├── i18n/               # Shared localization (JSON + Embed)
+│   └── proto/              # Shared gRPC definitions
+├── go.mod                  # Single root module
+└── Makefile                # Unified build system
 ```
 
 ---
@@ -133,12 +111,24 @@ deft/
 
 ---
 
+## Future Automation Plans
+
+### Magic SSL (Caddy Integration)
+To hit the "North Star" of ease of use, future versions of the installer will offer:
+1.  **Automatic Reverse Proxy:** Optionally install Caddy alongside the Panel container.
+2.  **Automatic HTTPS:** Use Caddy's built-in Let's Encrypt integration to provide instant SSL for the domain name.
+3.  **Docker Compose:** Switch the Panel setup to a tiny `docker-compose.yaml` that orchestrates `deft-panel` and `caddy` together.
+
+---
+
 ## Build Commands
 
 ```bash
-make agent      # Builds agent to bin/deft
+make agent-cli  # Builds CLI to bin/deft
+make daemon     # Builds agent daemon to bin/deftd
 make installer  # Builds installer to bin/deft-install
 make panel      # Builds panel to bin/deft-panel
+make docker-panel # Builds local Docker image for the panel (needs sudo)
 make all        # Builds all
 ```
 
