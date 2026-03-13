@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/deft/internal/i18n"
+	"github.com/lucasile/deft/internal/i18n"
 	"github.com/manifoldco/promptui"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -60,13 +60,11 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	log.Info().Msg(i18n.T("UninstallStart", nil))
 
 	_ = runCommand("systemctl", "stop", "deft")
-	log.Info().Msg(i18n.T("ServiceStopped", nil))
-
 	_ = runCommand("systemctl", "disable", "deft")
-	log.Info().Msg(i18n.T("ServiceDisabled", nil))
+	_ = runCommand("systemctl", "unmask", "deft")
 
 	serviceFile := "/etc/systemd/system/deft.service"
-	if _, err := os.Stat(serviceFile); err == nil {
+	if _, err := os.Lstat(serviceFile); err == nil {
 		if err := os.Remove(serviceFile); err != nil {
 			log.Warn().Err(err).Msg("Failed to remove service file")
 		} else {
@@ -78,7 +76,7 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	log.Info().Msg(i18n.T("DaemonReloaded", nil))
 
 	binaryPath := "/usr/local/bin/deft"
-	if _, err := os.Stat(binaryPath); err == nil {
+	if _, err := os.Lstat(binaryPath); err == nil {
 		if err := os.Remove(binaryPath); err != nil {
 			log.Warn().Err(err).Msg("Failed to remove binary")
 		} else {

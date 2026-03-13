@@ -15,5 +15,4 @@ func Execute() error {
 }
 
 func init() {
-	// Root command initialization logic
 }

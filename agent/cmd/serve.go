@@ -21,7 +21,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 	log.Info().Msg("Deft agent starting...")
 	log.Info().Msg("Phase 1 MVP: Serve command placeholder active.")
 
-	// For now, just keep the process alive
 	for {
 		log.Debug().Msg("Agent heartbeat...")
 		time.Sleep(30 * time.Second)
