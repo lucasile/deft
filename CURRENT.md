@@ -12,17 +12,18 @@
 - [x] Implement `agent/docker/container/` — Container lifecycle (create, start, stop, remove).
 - [x] Implement `agent/docker/console/` — Generic log streaming and command stdin.
 - [x] Implement `agent/docker/stats/` — Real-time resource usage streaming.
+- [x] Implement `agent/tunnel/connection.go` — Bidirectional gRPC stream with mTLS and backoff.
 
 ## Current Task
-**Implement `agent/tunnel/connection.go`**
+**Implement `agent/tunnel/handler.go`**
 
-The tunnel connection should:
-1. Establish a bidirectional gRPC stream to the central panel.
-2. Handle mutual TLS (mTLS) authentication using certificates from `/etc/deft/certs/`.
-3. Implement an exponential backoff reconnection strategy (1s to 60s).
+The command handler should:
+1. Dispatch incoming `PanelCommand` messages to the corresponding Docker functions (Create, Start, Stop, Remove).
+2. Send back a `CommandResult` to the panel via the gRPC stream to indicate success or failure.
+3. Handle context cancellation correctly.
 
 ## Next Tasks (do not start yet)
-1. `agent/tunnel/handler.go` — dispatch incoming commands
+1. `agent/main.go` — Wire everything together in the `serve` command.
 
 ## Blockers / Notes
 - None yet
