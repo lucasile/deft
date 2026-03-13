@@ -1,4 +1,4 @@
-package docker
+package container
 
 import (
 	"context"
@@ -7,10 +7,11 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/lucasile/deft/agent/docker"
 	"github.com/rs/zerolog/log"
 )
 
-func (c *Client) CreateContainer(ctx context.Context, name, imgName string, config *container.Config, hostConfig *container.HostConfig) (string, error) {
+func Create(ctx context.Context, c *docker.Client, name, imgName string, config *container.Config, hostConfig *container.HostConfig) (string, error) {
 	reader, err := c.ImagePull(ctx, imgName, image.PullOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to pull image: %w", err)
@@ -26,7 +27,7 @@ func (c *Client) CreateContainer(ctx context.Context, name, imgName string, conf
 	return resp.ID, nil
 }
 
-func (c *Client) StartContainer(ctx context.Context, id string) error {
+func Start(ctx context.Context, c *docker.Client, id string) error {
 	if err := c.ContainerStart(ctx, id, container.StartOptions{}); err != nil {
 		return fmt.Errorf("failed to start container: %w", err)
 	}
@@ -34,7 +35,7 @@ func (c *Client) StartContainer(ctx context.Context, id string) error {
 	return nil
 }
 
-func (c *Client) StopContainer(ctx context.Context, id string) error {
+func Stop(ctx context.Context, c *docker.Client, id string) error {
 	timeout := 10
 	if err := c.ContainerStop(ctx, id, container.StopOptions{Timeout: &timeout}); err != nil {
 		return fmt.Errorf("failed to stop container: %w", err)
@@ -43,7 +44,7 @@ func (c *Client) StopContainer(ctx context.Context, id string) error {
 	return nil
 }
 
-func (c *Client) RemoveContainer(ctx context.Context, id string) error {
+func Remove(ctx context.Context, c *docker.Client, id string) error {
 	if err := c.ContainerRemove(ctx, id, container.RemoveOptions{Force: true, RemoveVolumes: true}); err != nil {
 		return fmt.Errorf("failed to remove container: %w", err)
 	}

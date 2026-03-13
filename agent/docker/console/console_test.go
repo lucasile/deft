@@ -1,4 +1,4 @@
-package docker
+package console
 
 import (
 	"bufio"
@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/lucasile/deft/agent/docker"
+	containerpkg "github.com/lucasile/deft/agent/docker/container"
 )
 
 func TestConsole(t *testing.T) {
 	ctx := context.Background()
-	cli, err := NewClient()
+	cli, err := docker.NewClient()
 	if err != nil {
 		t.Skipf("Skipping test because Docker daemon is not available: %v", err)
 	}
@@ -21,7 +23,7 @@ func TestConsole(t *testing.T) {
 	name := "deft-test-console"
 	imageName := "alpine"
 
-	id, err := cli.CreateContainer(ctx, name, imageName, &container.Config{
+	id, err := containerpkg.Create(ctx, cli, name, imageName, &container.Config{
 		Image:        imageName,
 		Cmd:          []string{"sh", "-c", "echo 'hello world'; sleep 10"},
 		OpenStdin:    true,
@@ -35,14 +37,14 @@ func TestConsole(t *testing.T) {
 		t.Fatalf("Failed to create container: %v", err)
 	}
 	defer func() {
-		_ = cli.RemoveContainer(ctx, id)
+		_ = containerpkg.Remove(ctx, cli, id)
 	}()
 
-	if err := cli.StartContainer(ctx, id); err != nil {
+	if err := containerpkg.Start(ctx, cli, id); err != nil {
 		t.Fatalf("Failed to start container: %v", err)
 	}
 
-	reader, err := cli.StreamLogs(ctx, id)
+	reader, err := StreamLogs(ctx, cli, id)
 	if err != nil {
 		t.Fatalf("Failed to stream logs: %v", err)
 	}
@@ -76,7 +78,7 @@ func TestConsole(t *testing.T) {
 
 func TestSendCommand(t *testing.T) {
 	ctx := context.Background()
-	cli, err := NewClient()
+	cli, err := docker.NewClient()
 	if err != nil {
 		t.Skipf("Skipping test because Docker daemon is not available: %v", err)
 	}
@@ -85,7 +87,7 @@ func TestSendCommand(t *testing.T) {
 	name := "deft-test-send-command"
 	imageName := "alpine"
 
-	id, err := cli.CreateContainer(ctx, name, imageName, &container.Config{
+	id, err := containerpkg.Create(ctx, cli, name, imageName, &container.Config{
 		Image:       imageName,
 		Cmd:         []string{"sh"},
 		OpenStdin:   true,
@@ -97,21 +99,21 @@ func TestSendCommand(t *testing.T) {
 		t.Fatalf("Failed to create container: %v", err)
 	}
 	defer func() {
-		_ = cli.RemoveContainer(ctx, id)
+		_ = containerpkg.Remove(ctx, cli, id)
 	}()
 
-	if err := cli.StartContainer(ctx, id); err != nil {
+	if err := containerpkg.Start(ctx, cli, id); err != nil {
 		t.Fatalf("Failed to start container: %v", err)
 	}
 
-	reader, err := cli.StreamLogs(ctx, id)
+	reader, err := StreamLogs(ctx, cli, id)
 	if err != nil {
 		t.Fatalf("Failed to stream logs: %v", err)
 	}
 	defer reader.Close()
 
 	expected := "legit connection"
-	if err := cli.SendCommand(ctx, id, "echo '"+expected+"'"); err != nil {
+	if err := SendCommand(ctx, cli, id, "echo '"+expected+"'"); err != nil {
 		t.Fatalf("Failed to send command: %v", err)
 	}
 

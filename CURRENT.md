@@ -9,19 +9,20 @@
 - [x] Root-level `Makefile` and `go.work` — unified build system for all modules.
 - [x] Support for Go 1.26.1 and i18n (EN/RO).
 - [x] Implement `agent/docker/client.go` — Docker daemon connection and version negotiation.
-- [x] Implement `agent/docker/container.go` — Container lifecycle (create, start, stop, remove).
-- [x] Implement `agent/docker/console.go` — Generic log streaming and command stdin.
+- [x] Implement `agent/docker/container/` — Container lifecycle (create, start, stop, remove).
+- [x] Implement `agent/docker/console/` — Generic log streaming and command stdin.
+- [x] Implement `agent/docker/stats/` — Real-time resource usage streaming.
 
 ## Current Task
-**Implement `agent/docker/stats.go`**
+**Implement `agent/tunnel/connection.go`**
 
-The stats management should:
-1. Implement a method to stream real-time resource usage (CPU, Memory, Network, Disk I/O) for a specific container.
-2. Return a channel or stream that the agent can eventually send back to the panel.
+The tunnel connection should:
+1. Establish a bidirectional gRPC stream to the central panel.
+2. Handle mutual TLS (mTLS) authentication using certificates from `/etc/deft/certs/`.
+3. Implement an exponential backoff reconnection strategy (1s to 60s).
 
 ## Next Tasks (do not start yet)
-1. `agent/tunnel/connection.go` — outbound gRPC to panel
-2. `agent/tunnel/handler.go` — dispatch incoming commands
+1. `agent/tunnel/handler.go` — dispatch incoming commands
 
 ## Blockers / Notes
 - None yet

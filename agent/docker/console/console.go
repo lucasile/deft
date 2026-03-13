@@ -1,4 +1,4 @@
-package docker
+package console
 
 import (
 	"context"
@@ -6,9 +6,10 @@ import (
 	"io"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/lucasile/deft/agent/docker"
 )
 
-func (c *Client) StreamLogs(ctx context.Context, id string) (io.ReadCloser, error) {
+func StreamLogs(ctx context.Context, c *docker.Client, id string) (io.ReadCloser, error) {
 	options := container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
@@ -19,7 +20,7 @@ func (c *Client) StreamLogs(ctx context.Context, id string) (io.ReadCloser, erro
 	return c.ContainerLogs(ctx, id, options)
 }
 
-func (c *Client) SendCommand(ctx context.Context, id string, command string) error {
+func SendCommand(ctx context.Context, c *docker.Client, id string, command string) error {
 	resp, err := c.ContainerAttach(ctx, id, container.AttachOptions{
 		Stream: true,
 		Stdin:  true,
