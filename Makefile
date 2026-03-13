@@ -1,60 +1,65 @@
 # Makefile for Deft - AI Server Manager
 
-.PHONY: all agent installer panel clean test tidy
+.PHONY: all agent-cli daemon installer panel docker-panel clean test tidy check-root
 
-# Go binary settings
+# Go settings
 GO := go
 GOTOOLCHAIN := auto
 PATH := /home/lucasi/sdk/go1.26.1/bin:$(PATH)
 
-# Build outputs
+# Output directory
 BIN_DIR := ./bin
-AGENT_BIN := $(BIN_DIR)/deft
+
+# Binary names
+CLI_BIN := $(BIN_DIR)/deft
+DAEMON_BIN := $(BIN_DIR)/deftd
 INSTALLER_BIN := $(BIN_DIR)/deft-install
 PANEL_BIN := $(BIN_DIR)/deft-panel
 
-# Ensure bin directory exists
+# Helper to check for root/sudo
+check-root:
+	@if [ "$$(id -u)" != "0" ]; then \
+		echo "Error: This target requires sudo / root privileges."; \
+		exit 1; \
+	fi
+
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
-# Default target: build all components
-all: agent installer panel
+all: agent-cli daemon installer panel
 
-# Build the agent module
-agent: $(BIN_DIR)
-	@echo "Building Agent..."
-	cd agent && $(GO) build -o ../$(AGENT_BIN) .
+agent-cli: $(BIN_DIR)
+	@echo "Building CLI (deft)..."
+	$(GO) build -o $(CLI_BIN) ./cmd/deft
 
-# Build the installer module
+daemon: $(BIN_DIR)
+	@echo "Building Daemon (deftd)..."
+	$(GO) build -o $(DAEMON_BIN) ./cmd/deftd
+
 installer: $(BIN_DIR)
-	@echo "Building Installer..."
-	cd installer && $(GO) build -o ../$(INSTALLER_BIN) .
+	@echo "Building Installer (deft-install)..."
+	$(GO) build -o $(INSTALLER_BIN) ./cmd/deft-install
 
-# Build the panel module
 panel: $(BIN_DIR)
 	@echo "Building Panel Frontend..."
-	cd panel/web && pnpm install && pnpm run build
-	@echo "Building Panel Backend..."
-	cd panel && $(GO) build -o ../$(PANEL_BIN) .
+	cd internal/panel/ui/web && pnpm install && pnpm run build
+	@echo "Building Panel Backend (deft-panel)..."
+	$(GO) build -o $(PANEL_BIN) ./cmd/deft-panel
 
-# Clean up built binaries
+docker-panel: check-root
+	@echo "Building Panel Docker Image (requires sudo)..."
+	docker build -t ghcr.io/lucasile/deft-panel:latest -f panel/Dockerfile .
+
 clean:
 	@echo "Cleaning up..."
 	rm -rf $(BIN_DIR)
-	rm -rf panel/web/build
-	rm -rf panel/web/.svelte-kit
+	rm -rf internal/panel/ui/web/build
+	rm -rf internal/panel/ui/web/.svelte-kit
 
-# Run tests for all modules
 test:
 	@echo "Running tests..."
 	$(GO) test ./...
 
-# Tidy up Go modules
 tidy:
-	@echo "Tidying up modules..."
-	$(GO) work sync
-	cd agent && $(GO) mod tidy
-	cd installer && $(GO) mod tidy
-	cd panel && $(GO) mod tidy
-	cd proto && $(GO) mod tidy
-	cd internal/i18n && $(GO) mod tidy
+	@echo "Tidying module..."
+	$(GO) mod tidy
