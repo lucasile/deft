@@ -73,3 +73,73 @@ func TestConsole(t *testing.T) {
 		t.Error("Expected log message 'hello world' not found")
 	}
 }
+
+func TestSendCommand(t *testing.T) {
+	ctx := context.Background()
+	cli, err := NewClient()
+	if err != nil {
+		t.Skipf("Skipping test because Docker daemon is not available: %v", err)
+	}
+	defer cli.Close()
+
+	name := "deft-test-send-command"
+	imageName := "alpine"
+
+	id, err := cli.CreateContainer(ctx, name, imageName, &container.Config{
+		Image:       imageName,
+		Cmd:         []string{"sh"},
+		OpenStdin:   true,
+		StdinOnce:   false,
+		AttachStdin: true,
+		Tty:         true,
+	}, &container.HostConfig{})
+	if err != nil {
+		t.Fatalf("Failed to create container: %v", err)
+	}
+	defer func() {
+		_ = cli.RemoveContainer(ctx, id)
+	}()
+
+	if err := cli.StartContainer(ctx, id); err != nil {
+		t.Fatalf("Failed to start container: %v", err)
+	}
+
+	reader, err := cli.StreamLogs(ctx, id)
+	if err != nil {
+		t.Fatalf("Failed to stream logs: %v", err)
+	}
+	defer reader.Close()
+
+	expected := "legit connection"
+	if err := cli.SendCommand(ctx, id, "echo '"+expected+"'"); err != nil {
+		t.Fatalf("Failed to send command: %v", err)
+	}
+
+	found := false
+	scanner := bufio.NewScanner(reader)
+	timeout := time.After(5 * time.Second)
+	lineChan := make(chan string)
+
+	go func() {
+		for scanner.Scan() {
+			lineChan <- scanner.Text()
+		}
+	}()
+
+	for {
+		select {
+		case line := <-lineChan:
+			if strings.Contains(line, expected) {
+				found = true
+				goto Done
+			}
+		case <-timeout:
+			t.Fatal("Timed out waiting for command output")
+		}
+	}
+
+Done:
+	if !found {
+		t.Errorf("Expected output '%s' not found", expected)
+	}
+}
