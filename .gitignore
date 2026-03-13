@@ -1,0 +1,38 @@
+# Binaries
+deft-agent
+deft-agent-*
+deft-panel
+
+# Go
+*.test
+*.out
+
+# Gemini
+.gemini/checkpoint*
+.gemini/*.json
+.gemini/tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node (for panel/web)
+node_modules/
+panel/web/.svelte-kit/
+panel/web/dist/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Certs (never commit private keys)
+*.key
+*.pem
+certs/
