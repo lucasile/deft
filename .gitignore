@@ -1,7 +1,5 @@
 # Binaries
-deft-agent
-deft-agent-*
-deft-panel
+bin/
 
 # Go
 *.test
