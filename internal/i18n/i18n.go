@@ -18,7 +18,6 @@ func Init(lang string) {
 	bundle = i18n.NewBundle(language.English)
 	bundle.RegisterUnmarshalFunc("json", json.Unmarshal)
 
-	// Load all embedded JSON files
 	files, _ := localeFS.ReadDir("locales")
 	for _, f := range files {
 		data, _ := localeFS.ReadFile("locales/" + f.Name())
@@ -32,11 +31,11 @@ func T(id string, data map[string]interface{}) string {
 	if localizer == nil {
 		return id
 	}
-	msg, _ := localizer.Localize(&i18n.LocalizeConfig{
+	msg, err := localizer.Localize(&i18n.LocalizeConfig{
 		MessageID:    id,
 		TemplateData: data,
 	})
-	if msg == "" {
+	if err != nil || msg == "" {
 		return id
 	}
 	return msg

@@ -5,5 +5,5 @@ const (
 	configDirPath          = "/etc/deft"
 	volumesDirPath         = "/var/lib/deft/volumes"
 	servicePath            = "/etc/systemd/system/deft.service"
-	agentDownloadURLFormat = "https://github.com/deft-project/deft/releases/latest/download/deft-%s-%s"
+	agentDownloadURLFormat = "https://github.com/lucasile/deft/releases/latest/download/deft-%s-%s"
 )

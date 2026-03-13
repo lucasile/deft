@@ -8,21 +8,21 @@
 - [x] Implement `agent` — `serve` and `uninstall` commands.
 - [x] Root-level `Makefile` and `go.work` — unified build system for all modules.
 - [x] Support for Go 1.26.1 and i18n (EN/RO).
+- [x] Implement `agent/docker/client.go` — Docker daemon connection and version negotiation.
 
 ## Current Task
-**Implement `agent/docker/client.go`**
+**Implement `agent/docker/container.go`**
 
-The Docker client should:
-1. Initialize a connection to the Docker daemon via the Unix socket (`/var/run/docker.sock`).
-2. Provide a wrapper to check the connection status.
-3. Handle API version negotiation.
+The container management should:
+1. Implement a method to create a container from a given image and configuration.
+2. Implement methods to start, stop, and delete containers.
+3. Handle error cases gracefully (e.g., container already exists/stopped).
 
 ## Next Tasks (do not start yet)
-1. `agent/docker/container.go` — create/start/stop/delete containers
-2. `agent/docker/console.go` — stream container stdout/stderr
-3. `agent/docker/stats.go` — resource usage per container
-4. `agent/tunnel/connection.go` — outbound gRPC to panel
-5. `agent/tunnel/handler.go` — dispatch incoming commands
+1. `agent/docker/console.go` — stream container stdout/stderr
+2. `agent/docker/stats.go` — resource usage per container
+3. `agent/tunnel/connection.go` — outbound gRPC to panel
+4. `agent/tunnel/handler.go` — dispatch incoming commands
 
 ## Blockers / Notes
 - None yet

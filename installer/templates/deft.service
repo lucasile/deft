@@ -2,13 +2,13 @@
 Description=Deft Node Agent
 After=network.target docker.service
 Requires=docker.service
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/deft serve
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=0
 User=root
 StandardOutput=journal
 StandardError=journal

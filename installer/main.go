@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"runtime"
 
-	"github.com/deft/internal/i18n"
+	"github.com/lucasile/deft/internal/i18n"
 	"github.com/manifoldco/promptui"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -115,24 +115,31 @@ func main() {
 		log.Info().Msg(i18n.T("DirCreated", map[string]interface{}{"Path": dir}))
 	}
 
+	_ = runCommandQuiet("systemctl", "stop", "deft")
+	_ = runCommandQuiet("systemctl", "disable", "deft")
+	_ = runCommandQuiet("systemctl", "unmask", "deft")
+	_ = os.Remove(servicePath)
+	_ = runCommandQuiet("systemctl", "daemon-reload")
+
 	if err := os.WriteFile(servicePath, serviceTemplate, 0644); err != nil {
 		log.Fatal().Err(err).Msg("failed to write systemd service file")
 	}
 	log.Info().Str("path", servicePath).Msg("Systemd service file created")
 
 	log.Info().Msg(i18n.T("ReloadingSystemd", nil))
-	_ = runCommand("systemctl", "daemon-reload")
+	_ = runCommandQuiet("systemctl", "daemon-reload")
 
 	log.Info().Msg(i18n.T("EnablingService", nil))
-	_ = runCommand("systemctl", "enable", "deft")
+	if err := runCommand("systemctl", "enable", "deft"); err != nil {
+		log.Warn().Err(err).Msg("failed to enable service")
+	}
 
 	log.Info().Msg(i18n.T("StartingService", nil))
-	_ = runCommand("systemctl", "start", "deft")
+	if err := runCommand("systemctl", "start", "deft"); err != nil {
+		log.Warn().Err(err).Msg("failed to start service")
+	}
 
 	fmt.Printf("\n%s\n", i18n.T("Success", nil))
-	fmt.Println(i18n.T("NextSteps", nil))
-	fmt.Println(i18n.T("ConfigHint", nil))
-	fmt.Println(i18n.T("LogHint", nil))
 }
 
 func checkDocker() error {
@@ -183,5 +190,10 @@ func runCommand(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func runCommandQuiet(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
 	return cmd.Run()
 }
