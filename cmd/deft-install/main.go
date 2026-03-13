@@ -71,7 +71,6 @@ func main() {
 	}
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	// Component Selection
 	compSelect := promptui.Select{
 		Label: i18n.T("ComponentSelectLabel", nil),
 		Items: []string{
@@ -97,19 +96,31 @@ func main() {
 	}
 
 	if installPanel {
-		runPanelInstall()
+		httpPort := promptDefault("Enter Panel Web Port", "3000")
+		grpcPort := promptDefault("Enter Agent gRPC Port", "50051")
+		runPanelInstall(httpPort, grpcPort)
 	}
 
 	fmt.Printf("\n%s\n", i18n.T("Success", nil))
 }
 
+func promptDefault(label, defaultValue string) string {
+	prompt := promptui.Prompt{
+		Label:   label,
+		Default: defaultValue,
+	}
+	result, err := prompt.Run()
+	if err != nil {
+		return defaultValue
+	}
+	return result
+}
+
 func runAgentInstall() {
 	log.Info().Msg(i18n.T("InstallStart", nil))
 	
-	// Install 'deft' (CLI)
 	installBinary("deft", defaultBinaryPath)
 	
-	// Install 'deftd' (Daemon)
 	daemonPath := "/usr/local/bin/deftd"
 	installBinary("deftd", daemonPath)
 
@@ -142,10 +153,9 @@ func runAgentInstall() {
 	_ = runCommand("systemctl", "start", "deft")
 }
 
-func runPanelInstall() {
+func runPanelInstall(httpPort, grpcPort string) {
 	log.Info().Msg("Installing Deft Panel via Docker...")
 	
-	// For now, assume public image. We'll use a placeholder image name.
 	image := "ghcr.io/lucasile/deft-panel:latest"
 	
 	log.Info().Str("image", image).Msg("Pulling panel image...")
@@ -153,19 +163,18 @@ func runPanelInstall() {
 		log.Warn().Err(err).Msg("Failed to pull remote image, checking for local image...")
 	}
 
-	// Run the panel container
 	err := runCommand("docker", "run", "-d",
 		"--name", "deft-panel",
 		"--restart", "always",
-		"-p", "3000:3000",
-		"-p", "50051:50051",
+		"-p", httpPort+":3000",
+		"-p", grpcPort+":50051",
 		"-v", "deft-panel-data:/data",
 		image)
 	
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start panel container")
 	} else {
-		log.Info().Msg("Panel container started on ports 3000 (UI) and 50051 (gRPC)")
+		log.Info().Msgf("Panel container started on ports %s (UI) and %s (gRPC)", httpPort, grpcPort)
 	}
 }
 

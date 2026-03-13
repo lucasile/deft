@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -36,9 +38,39 @@ var panelLogsCmd = &cobra.Command{
 	},
 }
 
+var panelConfigCmd = &cobra.Command{
+	Use:   "config",
+	Short: "Reconfigure the Deft panel container (ports)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		Elevate()
+		httpPort, _ := cmd.Flags().GetString("port")
+		grpcPort, _ := cmd.Flags().GetString("grpc-port")
+
+		fmt.Printf("Updating panel configuration: UI=%s, gRPC=%s\n", httpPort, grpcPort)
+
+		// Stop and remove existing
+		_ = runCommandQuiet("docker", "stop", "deft-panel")
+		_ = runCommandQuiet("docker", "rm", "deft-panel")
+
+		// Recreate with new ports
+		image := "ghcr.io/lucasile/deft-panel:latest"
+		return runCommand("docker", "run", "-d",
+			"--name", "deft-panel",
+			"--restart", "always",
+			"-p", httpPort+":3000",
+			"-p", grpcPort+":50051",
+			"-v", "deft-panel-data:/data",
+			image)
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(panelCmd)
 	panelCmd.AddCommand(panelStartCmd)
 	panelCmd.AddCommand(panelStopCmd)
 	panelCmd.AddCommand(panelLogsCmd)
+	panelCmd.AddCommand(panelConfigCmd)
+
+	panelConfigCmd.Flags().String("port", "3000", "Panel UI Port")
+	panelConfigCmd.Flags().String("grpc-port", "50051", "Panel gRPC Port")
 }

@@ -20,8 +20,12 @@ func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
 	isDev := os.Getenv("DEV") == "true"
+	
+	httpPort := getEnv("DEFT_HTTP_PORT", "3000")
+	grpcPort := getEnv("DEFT_GRPC_PORT", "50051")
+	dbPath := getEnv("DEFT_DB_PATH", "panel.db")
 
-	database, err := db.Init("panel.db")
+	database, err := db.Init(dbPath)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to initialize database")
 	}
@@ -31,16 +35,17 @@ func main() {
 	apiServer := api.NewServer(nodeManager)
 
 	// Start gRPC server
-	lis, err := net.Listen("tcp", ":50051")
+	grpcAddr := ":" + grpcPort
+	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to listen for gRPC")
+		log.Fatal().Err(err).Str("addr", grpcAddr).Msg("failed to listen for gRPC")
 	}
 
 	grpcServer := grpc.NewServer()
 	proto.RegisterAgentServiceServer(grpcServer, nodeManager)
 
 	go func() {
-		log.Info().Msg("gRPC server listening on :50051")
+		log.Info().Str("addr", grpcAddr).Msg("gRPC server listening")
 		if err := grpcServer.Serve(lis); err != nil {
 			log.Fatal().Err(err).Msg("gRPC server failed")
 		}
@@ -71,10 +76,17 @@ func main() {
 		mux.ServeHTTP(w, r)
 	})
 
-	addr := ":3000"
-	log.Info().Str("addr", addr).Msg("Deft Panel starting...")
+	httpAddr := ":" + httpPort
+	log.Info().Str("addr", httpAddr).Msg("Deft Panel starting...")
 
-	if err := http.ListenAndServe(addr, handler); err != nil {
+	if err := http.ListenAndServe(httpAddr, handler); err != nil {
 		log.Fatal().Err(err).Msg("http server failed")
 	}
+}
+
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
 }
