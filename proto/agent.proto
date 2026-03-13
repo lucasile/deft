@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package deft;
+
+option go_package = "github.com/lucasile/deft/proto";
+
+service AgentService {
+  rpc Connect(stream AgentMessage) returns (stream PanelCommand) {}
+}
+
+message AgentMessage {
+  string node_id = 1;
+  oneof content {
+    Heartbeat heartbeat = 2;
+    CommandResult result = 3;
+    StatsUpdate stats = 4;
+  }
+}
+
+message Heartbeat {
+  int64 timestamp = 1;
+}
+
+message CommandResult {
+  string command_id = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+message StatsUpdate {
+  string container_id = 1;
+  double cpu_percent = 2;
+  uint64 memory_bytes = 3;
+}
+
+message PanelCommand {
+  string command_id = 1;
+  oneof action {
+    CreateContainer create = 2;
+    StartContainer start = 3;
+    StopContainer stop = 4;
+    RemoveContainer remove = 5;
+  }
+}
+
+message CreateContainer {
+  string name = 1;
+  string image = 2;
+}
+
+message StartContainer {
+  string id = 1;
+}
+
+message StopContainer {
+  string id = 1;
+}
+
+message RemoveContainer {
+  string id = 1;
+}
