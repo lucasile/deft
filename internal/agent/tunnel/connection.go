@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/lucasile/deft/proto"
+	"github.com/lucasile/deft/internal/proto"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

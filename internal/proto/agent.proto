@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package deft;
 
-option go_package = "github.com/lucasile/deft/proto";
+option go_package = "github.com/lucasile/deft/internal/proto";
 
 service AgentService {
   rpc Connect(stream AgentMessage) returns (stream PanelCommand) {}

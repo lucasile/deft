@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lucasile/deft/proto"
+	"github.com/lucasile/deft/internal/proto"
 	"google.golang.org/grpc"
 )
 

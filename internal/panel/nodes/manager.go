@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/lucasile/deft/internal/panel/db"
-	"github.com/lucasile/deft/proto"
+	"github.com/lucasile/deft/internal/proto"
 	"github.com/rs/zerolog/log"
 )
 

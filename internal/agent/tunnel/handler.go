@@ -7,7 +7,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/lucasile/deft/internal/agent/docker"
 	dockercontainer "github.com/lucasile/deft/internal/agent/docker/container"
-	"github.com/lucasile/deft/proto"
+	"github.com/lucasile/deft/internal/proto"
 	"github.com/rs/zerolog/log"
 )
 

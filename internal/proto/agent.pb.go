@@ -638,7 +638,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x0fRemoveContainer\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id2G\n" +
 	"\fAgentService\x127\n" +
-	"\aConnect\x12\x12.deft.AgentMessage\x1a\x12.deft.PanelCommand\"\x00(\x010\x01B Z\x1egithub.com/lucasile/deft/protob\x06proto3"
+	"\aConnect\x12\x12.deft.AgentMessage\x1a\x12.deft.PanelCommand\"\x00(\x010\x01B Z\x1egithub.com/lucasile/deft/internal/protob\x06proto3"
 
 var (
 	file_proto_agent_proto_rawDescOnce sync.Once

@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/lucasile/deft/internal/panel/nodes"
-	"github.com/lucasile/deft/proto"
+	"github.com/lucasile/deft/internal/proto"
 )
 
 type Server struct {

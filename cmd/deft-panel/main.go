@@ -9,7 +9,7 @@ import (
 	"github.com/lucasile/deft/internal/panel/db"
 	"github.com/lucasile/deft/internal/panel/nodes"
 	"github.com/lucasile/deft/internal/panel/ui"
-	"github.com/lucasile/deft/proto"
+	"github.com/lucasile/deft/internal/proto"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
