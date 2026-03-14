@@ -30,6 +30,15 @@ var panelStopCmd = &cobra.Command{
 	},
 }
 
+var panelRestartCmd = &cobra.Command{
+	Use:   "restart",
+	Short: "Restart the Deft panel container",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		Elevate()
+		return runCommand("docker", "restart", "deft-panel")
+	},
+}
+
 var panelLogsCmd = &cobra.Command{
 	Use:   "logs",
 	Short: "Show logs of the Deft panel container",
@@ -60,6 +69,7 @@ var panelConfigCmd = &cobra.Command{
 			"--restart", "always",
 			"-p", httpPort+":3000",
 			"-p", "50051:50051",
+			"-v", "/etc/deft:/etc/deft:ro",
 			"-v", "deft-panel-data:/data",
 			image)
 	},
@@ -69,6 +79,7 @@ func init() {
 	rootCmd.AddCommand(panelCmd)
 	panelCmd.AddCommand(panelStartCmd)
 	panelCmd.AddCommand(panelStopCmd)
+	panelCmd.AddCommand(panelRestartCmd)
 	panelCmd.AddCommand(panelLogsCmd)
 	panelCmd.AddCommand(panelConfigCmd)
 

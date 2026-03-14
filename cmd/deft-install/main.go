@@ -172,6 +172,7 @@ func runPanelInstall(httpPort, grpcPort string) {
 		"--restart", "always",
 		"-p", httpPort+":3000",
 		"-p", grpcPort+":50051",
+		"-v", "/etc/deft:/etc/deft:ro",
 		"-v", "deft-panel-data:/data",
 		image)
 	

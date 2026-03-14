@@ -11,9 +11,11 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "deft",
-	Short: "Deft Universal Controller",
-	Long:  "A unified CLI to manage the Deft Agent daemon and the Panel container.",
+	Use:           "deft",
+	Short:         "Deft Universal Controller",
+	Long:          "A unified CLI to manage the Deft Agent daemon and the Panel container.",
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 var uninstallCmd = &cobra.Command{

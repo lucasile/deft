@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v4.25.1
-// source: proto/agent.proto
+// source: agent.proto
 
 package proto
 
@@ -36,7 +36,7 @@ type AgentMessage struct {
 
 func (x *AgentMessage) Reset() {
 	*x = AgentMessage{}
-	mi := &file_proto_agent_proto_msgTypes[0]
+	mi := &file_agent_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48,7 +48,7 @@ func (x *AgentMessage) String() string {
 func (*AgentMessage) ProtoMessage() {}
 
 func (x *AgentMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[0]
+	mi := &file_agent_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -61,7 +61,7 @@ func (x *AgentMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentMessage.ProtoReflect.Descriptor instead.
 func (*AgentMessage) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{0}
+	return file_agent_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *AgentMessage) GetNodeId() string {
@@ -136,7 +136,7 @@ type Heartbeat struct {
 
 func (x *Heartbeat) Reset() {
 	*x = Heartbeat{}
-	mi := &file_proto_agent_proto_msgTypes[1]
+	mi := &file_agent_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -148,7 +148,7 @@ func (x *Heartbeat) String() string {
 func (*Heartbeat) ProtoMessage() {}
 
 func (x *Heartbeat) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[1]
+	mi := &file_agent_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -161,7 +161,7 @@ func (x *Heartbeat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Heartbeat.ProtoReflect.Descriptor instead.
 func (*Heartbeat) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{1}
+	return file_agent_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Heartbeat) GetTimestamp() int64 {
@@ -182,7 +182,7 @@ type CommandResult struct {
 
 func (x *CommandResult) Reset() {
 	*x = CommandResult{}
-	mi := &file_proto_agent_proto_msgTypes[2]
+	mi := &file_agent_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -194,7 +194,7 @@ func (x *CommandResult) String() string {
 func (*CommandResult) ProtoMessage() {}
 
 func (x *CommandResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[2]
+	mi := &file_agent_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -207,7 +207,7 @@ func (x *CommandResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandResult.ProtoReflect.Descriptor instead.
 func (*CommandResult) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{2}
+	return file_agent_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CommandResult) GetCommandId() string {
@@ -242,7 +242,7 @@ type StatsUpdate struct {
 
 func (x *StatsUpdate) Reset() {
 	*x = StatsUpdate{}
-	mi := &file_proto_agent_proto_msgTypes[3]
+	mi := &file_agent_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -254,7 +254,7 @@ func (x *StatsUpdate) String() string {
 func (*StatsUpdate) ProtoMessage() {}
 
 func (x *StatsUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[3]
+	mi := &file_agent_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -267,7 +267,7 @@ func (x *StatsUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatsUpdate.ProtoReflect.Descriptor instead.
 func (*StatsUpdate) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{3}
+	return file_agent_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *StatsUpdate) GetContainerId() string {
@@ -307,7 +307,7 @@ type PanelCommand struct {
 
 func (x *PanelCommand) Reset() {
 	*x = PanelCommand{}
-	mi := &file_proto_agent_proto_msgTypes[4]
+	mi := &file_agent_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -319,7 +319,7 @@ func (x *PanelCommand) String() string {
 func (*PanelCommand) ProtoMessage() {}
 
 func (x *PanelCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[4]
+	mi := &file_agent_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -332,7 +332,7 @@ func (x *PanelCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PanelCommand.ProtoReflect.Descriptor instead.
 func (*PanelCommand) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{4}
+	return file_agent_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *PanelCommand) GetCommandId() string {
@@ -423,7 +423,7 @@ type CreateContainer struct {
 
 func (x *CreateContainer) Reset() {
 	*x = CreateContainer{}
-	mi := &file_proto_agent_proto_msgTypes[5]
+	mi := &file_agent_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -435,7 +435,7 @@ func (x *CreateContainer) String() string {
 func (*CreateContainer) ProtoMessage() {}
 
 func (x *CreateContainer) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[5]
+	mi := &file_agent_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -448,7 +448,7 @@ func (x *CreateContainer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateContainer.ProtoReflect.Descriptor instead.
 func (*CreateContainer) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{5}
+	return file_agent_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CreateContainer) GetName() string {
@@ -474,7 +474,7 @@ type StartContainer struct {
 
 func (x *StartContainer) Reset() {
 	*x = StartContainer{}
-	mi := &file_proto_agent_proto_msgTypes[6]
+	mi := &file_agent_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -486,7 +486,7 @@ func (x *StartContainer) String() string {
 func (*StartContainer) ProtoMessage() {}
 
 func (x *StartContainer) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[6]
+	mi := &file_agent_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -499,7 +499,7 @@ func (x *StartContainer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartContainer.ProtoReflect.Descriptor instead.
 func (*StartContainer) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{6}
+	return file_agent_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *StartContainer) GetId() string {
@@ -518,7 +518,7 @@ type StopContainer struct {
 
 func (x *StopContainer) Reset() {
 	*x = StopContainer{}
-	mi := &file_proto_agent_proto_msgTypes[7]
+	mi := &file_agent_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -530,7 +530,7 @@ func (x *StopContainer) String() string {
 func (*StopContainer) ProtoMessage() {}
 
 func (x *StopContainer) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[7]
+	mi := &file_agent_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -543,7 +543,7 @@ func (x *StopContainer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopContainer.ProtoReflect.Descriptor instead.
 func (*StopContainer) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{7}
+	return file_agent_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *StopContainer) GetId() string {
@@ -562,7 +562,7 @@ type RemoveContainer struct {
 
 func (x *RemoveContainer) Reset() {
 	*x = RemoveContainer{}
-	mi := &file_proto_agent_proto_msgTypes[8]
+	mi := &file_agent_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -574,7 +574,7 @@ func (x *RemoveContainer) String() string {
 func (*RemoveContainer) ProtoMessage() {}
 
 func (x *RemoveContainer) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[8]
+	mi := &file_agent_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -587,7 +587,7 @@ func (x *RemoveContainer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveContainer.ProtoReflect.Descriptor instead.
 func (*RemoveContainer) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{8}
+	return file_agent_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RemoveContainer) GetId() string {
@@ -597,11 +597,11 @@ func (x *RemoveContainer) GetId() string {
 	return ""
 }
 
-var File_proto_agent_proto protoreflect.FileDescriptor
+var File_agent_proto protoreflect.FileDescriptor
 
-const file_proto_agent_proto_rawDesc = "" +
+const file_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x11proto/agent.proto\x12\x04deft\"\xbd\x01\n" +
+	"\vagent.proto\x12\x04deft\"\xbd\x01\n" +
 	"\fAgentMessage\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12/\n" +
 	"\theartbeat\x18\x02 \x01(\v2\x0f.deft.HeartbeatH\x00R\theartbeat\x12-\n" +
@@ -638,22 +638,22 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x0fRemoveContainer\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id2G\n" +
 	"\fAgentService\x127\n" +
-	"\aConnect\x12\x12.deft.AgentMessage\x1a\x12.deft.PanelCommand\"\x00(\x010\x01B Z\x1egithub.com/lucasile/deft/internal/protob\x06proto3"
+	"\aConnect\x12\x12.deft.AgentMessage\x1a\x12.deft.PanelCommand\"\x00(\x010\x01B)Z'github.com/lucasile/deft/internal/protob\x06proto3"
 
 var (
-	file_proto_agent_proto_rawDescOnce sync.Once
-	file_proto_agent_proto_rawDescData []byte
+	file_agent_proto_rawDescOnce sync.Once
+	file_agent_proto_rawDescData []byte
 )
 
-func file_proto_agent_proto_rawDescGZIP() []byte {
-	file_proto_agent_proto_rawDescOnce.Do(func() {
-		file_proto_agent_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_agent_proto_rawDesc), len(file_proto_agent_proto_rawDesc)))
+func file_agent_proto_rawDescGZIP() []byte {
+	file_agent_proto_rawDescOnce.Do(func() {
+		file_agent_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_agent_proto_rawDesc), len(file_agent_proto_rawDesc)))
 	})
-	return file_proto_agent_proto_rawDescData
+	return file_agent_proto_rawDescData
 }
 
-var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
-var file_proto_agent_proto_goTypes = []any{
+var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_agent_proto_goTypes = []any{
 	(*AgentMessage)(nil),    // 0: deft.AgentMessage
 	(*Heartbeat)(nil),       // 1: deft.Heartbeat
 	(*CommandResult)(nil),   // 2: deft.CommandResult
@@ -664,7 +664,7 @@ var file_proto_agent_proto_goTypes = []any{
 	(*StopContainer)(nil),   // 7: deft.StopContainer
 	(*RemoveContainer)(nil), // 8: deft.RemoveContainer
 }
-var file_proto_agent_proto_depIdxs = []int32{
+var file_agent_proto_depIdxs = []int32{
 	1, // 0: deft.AgentMessage.heartbeat:type_name -> deft.Heartbeat
 	2, // 1: deft.AgentMessage.result:type_name -> deft.CommandResult
 	3, // 2: deft.AgentMessage.stats:type_name -> deft.StatsUpdate
@@ -681,17 +681,17 @@ var file_proto_agent_proto_depIdxs = []int32{
 	0, // [0:7] is the sub-list for field type_name
 }
 
-func init() { file_proto_agent_proto_init() }
-func file_proto_agent_proto_init() {
-	if File_proto_agent_proto != nil {
+func init() { file_agent_proto_init() }
+func file_agent_proto_init() {
+	if File_agent_proto != nil {
 		return
 	}
-	file_proto_agent_proto_msgTypes[0].OneofWrappers = []any{
+	file_agent_proto_msgTypes[0].OneofWrappers = []any{
 		(*AgentMessage_Heartbeat)(nil),
 		(*AgentMessage_Result)(nil),
 		(*AgentMessage_Stats)(nil),
 	}
-	file_proto_agent_proto_msgTypes[4].OneofWrappers = []any{
+	file_agent_proto_msgTypes[4].OneofWrappers = []any{
 		(*PanelCommand_Create)(nil),
 		(*PanelCommand_Start)(nil),
 		(*PanelCommand_Stop)(nil),
@@ -701,17 +701,17 @@ func file_proto_agent_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_agent_proto_rawDesc), len(file_proto_agent_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_agent_proto_rawDesc), len(file_agent_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_proto_agent_proto_goTypes,
-		DependencyIndexes: file_proto_agent_proto_depIdxs,
-		MessageInfos:      file_proto_agent_proto_msgTypes,
+		GoTypes:           file_agent_proto_goTypes,
+		DependencyIndexes: file_agent_proto_depIdxs,
+		MessageInfos:      file_agent_proto_msgTypes,
 	}.Build()
-	File_proto_agent_proto = out.File
-	file_proto_agent_proto_goTypes = nil
-	file_proto_agent_proto_depIdxs = nil
+	File_agent_proto = out.File
+	file_agent_proto_goTypes = nil
+	file_agent_proto_depIdxs = nil
 }

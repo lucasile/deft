@@ -6,7 +6,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/deft serve
+ExecStart=/usr/local/bin/deftd
 Restart=always
 RestartSec=5
 User=root

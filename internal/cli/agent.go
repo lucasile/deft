@@ -27,11 +27,21 @@ var agentStopCmd = &cobra.Command{
 	},
 }
 
+var agentRestartCmd = &cobra.Command{
+	Use:   "restart",
+	Short: "Restart the Deft agent daemon service",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		Elevate()
+		return runCommand("systemctl", "restart", "deft")
+	},
+}
+
 var agentStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show status of the Deft agent daemon",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runCommand("systemctl", "status", "deft")
+		_ = runCommand("systemctl", "status", "deft")
+		return nil
 	},
 }
 
@@ -39,5 +49,6 @@ func init() {
 	rootCmd.AddCommand(agentCmd)
 	agentCmd.AddCommand(agentStartCmd)
 	agentCmd.AddCommand(agentStopCmd)
+	agentCmd.AddCommand(agentRestartCmd)
 	agentCmd.AddCommand(agentStatusCmd)
 }

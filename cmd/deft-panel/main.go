@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -13,6 +16,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func main() {
@@ -25,6 +29,10 @@ func main() {
 	grpcPort := getEnv("DEFT_GRPC_PORT", "50051")
 	dbPath := getEnv("DEFT_DB_PATH", "panel.db")
 
+	caPath := getEnv("DEFT_CA_PATH", "/etc/deft/certs/ca.crt")
+	certPath := getEnv("DEFT_CERT_PATH", "/etc/deft/certs/panel.crt")
+	keyPath := getEnv("DEFT_KEY_PATH", "/etc/deft/certs/panel.key")
+
 	database, err := db.Init(dbPath)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to initialize database")
@@ -34,14 +42,24 @@ func main() {
 	nodeManager := nodes.NewManager(database)
 	apiServer := api.NewServer(nodeManager)
 
-	// Start gRPC server
+	// Start gRPC server with mTLS
 	grpcAddr := ":" + grpcPort
 	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		log.Fatal().Err(err).Str("addr", grpcAddr).Msg("failed to listen for gRPC")
 	}
 
-	grpcServer := grpc.NewServer()
+	creds, err := loadServerTLSCredentials(caPath, certPath, keyPath)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to load TLS credentials, gRPC will be insecure")
+	}
+
+	var opts []grpc.ServerOption
+	if creds != nil {
+		opts = append(opts, grpc.Creds(creds))
+	}
+
+	grpcServer := grpc.NewServer(opts...)
 	proto.RegisterAgentServiceServer(grpcServer, nodeManager)
 
 	go func() {
@@ -89,4 +107,31 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func loadServerTLSCredentials(caPath, certPath, keyPath string) (credentials.TransportCredentials, error) {
+	// Load CA certificate
+	pemClientCA, err := os.ReadFile(caPath)
+	if err != nil {
+		return nil, err
+	}
+
+	certPool := x509.NewCertPool()
+	if !certPool.AppendCertsFromPEM(pemClientCA) {
+		return nil, fmt.Errorf("failed to add client CA's certificate")
+	}
+
+	// Load server certificate and key
+	serverCert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return nil, err
+	}
+
+	config := &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    certPool,
+	}
+
+	return credentials.NewTLS(config), nil
 }
