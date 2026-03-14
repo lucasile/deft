@@ -25,10 +25,8 @@ func main() {
 
 	isDev := os.Getenv("DEV") == "true"
 	
-	httpPort := getEnv("DEFT_HTTP_PORT", "3000")
 	grpcPort := getEnv("DEFT_GRPC_PORT", "50051")
 	dbPath := getEnv("DEFT_DB_PATH", "panel.db")
-
 	caPath := getEnv("DEFT_CA_PATH", "/etc/deft/certs/ca.crt")
 	certPath := getEnv("DEFT_CERT_PATH", "/etc/deft/certs/panel.crt")
 	keyPath := getEnv("DEFT_KEY_PATH", "/etc/deft/certs/panel.key")
@@ -40,13 +38,26 @@ func main() {
 	defer database.Close()
 
 	nodeManager := nodes.NewManager(database)
-	apiServer := api.NewServer(nodeManager)
+	
+	// Start gRPC server with mTLS in a goroutine
+	go startGrpcServer(grpcPort, caPath, certPath, keyPath, nodeManager)
 
-	// Start gRPC server with mTLS
-	grpcAddr := ":" + grpcPort
-	lis, err := net.Listen("tcp", grpcAddr)
+	if isDev {
+		log.Info().Msg("Running in DEV mode. gRPC server started. API is handled by SvelteKit.")
+		select {} // Block forever
+	} else {
+		// In PROD, run the full HTTP server (UI + API)
+		httpPort := getEnv("DEFT_HTTP_PORT", "3000")
+		apiServer := api.NewServer(nodeManager)
+		runProdServer(httpPort, apiServer)
+	}
+}
+
+func startGrpcServer(port, caPath, certPath, keyPath string, nodeManager *nodes.Manager) {
+	addr := ":" + port
+	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatal().Err(err).Str("addr", grpcAddr).Msg("failed to listen for gRPC")
+		log.Fatal().Err(err).Str("addr", addr).Msg("failed to listen for gRPC")
 	}
 
 	creds, err := loadServerTLSCredentials(caPath, certPath, keyPath)
@@ -62,42 +73,26 @@ func main() {
 	grpcServer := grpc.NewServer(opts...)
 	proto.RegisterAgentServiceServer(grpcServer, nodeManager)
 
-	go func() {
-		log.Info().Str("addr", grpcAddr).Msg("gRPC server listening")
-		if err := grpcServer.Serve(lis); err != nil {
-			log.Fatal().Err(err).Msg("gRPC server failed")
-		}
-	}()
+	log.Info().Str("addr", addr).Msg("gRPC server listening")
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatal().Err(err).Msg("gRPC server failed")
+	}
+}
 
+func runProdServer(port string, apiServer *api.Server) {
 	mux := http.NewServeMux()
 	apiServer.RegisterHandlers(mux)
 
-	if !isDev {
-		publicFS, err := ui.GetFS()
-		if err != nil {
-			log.Fatal().Err(err).Msg("failed to get ui assets")
-		}
-		mux.Handle("/", http.FileServer(http.FS(publicFS)))
-	} else {
-		log.Info().Msg("Running in DEV mode - skipping embedded assets")
+	publicFS, err := ui.GetFS()
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to get ui assets")
 	}
+	mux.Handle("/", http.FileServer(http.FS(publicFS)))
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isDev {
-			w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			if r.Method == "OPTIONS" {
-				return
-			}
-		}
-		mux.ServeHTTP(w, r)
-	})
+	addr := ":" + port
+	log.Info().Str("addr", addr).Msg("Deft Panel (UI & API) starting...")
 
-	httpAddr := ":" + httpPort
-	log.Info().Str("addr", httpAddr).Msg("Deft Panel starting...")
-
-	if err := http.ListenAndServe(httpAddr, handler); err != nil {
+	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal().Err(err).Msg("http server failed")
 	}
 }
@@ -110,7 +105,6 @@ func getEnv(key, fallback string) string {
 }
 
 func loadServerTLSCredentials(caPath, certPath, keyPath string) (credentials.TransportCredentials, error) {
-	// Load CA certificate
 	pemClientCA, err := os.ReadFile(caPath)
 	if err != nil {
 		return nil, err
@@ -121,7 +115,6 @@ func loadServerTLSCredentials(caPath, certPath, keyPath string) (credentials.Tra
 		return nil, fmt.Errorf("failed to add client CA's certificate")
 	}
 
-	// Load server certificate and key
 	serverCert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
 		return nil, err
