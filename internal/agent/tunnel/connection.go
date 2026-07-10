@@ -31,7 +31,7 @@ func NewConnection(ctx context.Context, addr string, caPath, certPath, keyPath s
 	}
 
 	client := proto.NewAgentServiceClient(conn)
-	
+
 	c := &Connection{
 		client: client,
 	}
@@ -57,13 +57,14 @@ func (c *Connection) Connect(ctx context.Context, nodeID string) error {
 
 		c.stream = stream
 		log.Info().Msg("Connected to panel via gRPC tunnel")
-		
-		// Reset backoff on successful connection
-		backoff = 1 * time.Second
-		
-		// Send initial heartbeat to identify node
+
 		if err := c.SendHeartbeat(nodeID); err != nil {
-			log.Error().Err(err).Msg("Failed to send initial heartbeat")
+			log.Error().Err(err).Dur("retry_in", backoff).Msg("failed to send initial heartbeat")
+			time.Sleep(backoff)
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
 			continue
 		}
 

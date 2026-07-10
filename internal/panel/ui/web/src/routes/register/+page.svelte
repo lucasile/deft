@@ -41,7 +41,7 @@
 		<p style="color: red;">{error}</p>
 	{/if}
 
-	<button type="submit" disabled={$navigating}>
+	<button type="submit" disabled={!!$navigating}>
 		{$navigating ? 'Registering...' : 'Register'}
 	</button>
 </form>

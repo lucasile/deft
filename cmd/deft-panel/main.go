@@ -9,6 +9,8 @@ import (
 	"os"
 
 	"github.com/lucasile/deft/internal/panel/api"
+	"github.com/lucasile/deft/internal/panel/audit"
+	"github.com/lucasile/deft/internal/panel/auth"
 	"github.com/lucasile/deft/internal/panel/db"
 	"github.com/lucasile/deft/internal/panel/nodes"
 	"github.com/lucasile/deft/internal/panel/ui"
@@ -23,13 +25,15 @@ func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	isDev := os.Getenv("DEV") == "true"
-	
+	isDev := getEnvBool("DEFT_DEV", false)
+
 	grpcPort := getEnv("DEFT_GRPC_PORT", "50051")
+	httpPort := getEnv("DEFT_HTTP_PORT", "3000")
 	dbPath := getEnv("DEFT_DB_PATH", "panel.db")
 	caPath := getEnv("DEFT_CA_PATH", "/etc/deft/certs/ca.crt")
 	certPath := getEnv("DEFT_CERT_PATH", "/etc/deft/certs/panel.crt")
 	keyPath := getEnv("DEFT_KEY_PATH", "/etc/deft/certs/panel.key")
+	secureCookies := !getEnvBool("DEFT_INSECURE_COOKIES", false)
 
 	database, err := db.Init(dbPath)
 	if err != nil {
@@ -38,22 +42,16 @@ func main() {
 	defer database.Close()
 
 	nodeManager := nodes.NewManager(database)
-	
-	// Start gRPC server with mTLS in a goroutine
-	go startGrpcServer(grpcPort, caPath, certPath, keyPath, nodeManager)
+	authService := auth.NewService(database)
+	auditLogger := audit.NewLogger(database)
 
-	if isDev {
-		log.Info().Msg("Running in DEV mode. gRPC server started. API is handled by SvelteKit.")
-		select {} // Block forever
-	} else {
-		// In PROD, run the full HTTP server (UI + API)
-		httpPort := getEnv("DEFT_HTTP_PORT", "3000")
-		apiServer := api.NewServer(nodeManager)
-		runProdServer(httpPort, apiServer)
-	}
+	go startGrpcServer(grpcPort, caPath, certPath, keyPath, nodeManager, isDev)
+
+	apiServer := api.NewServer(nodeManager, authService, auditLogger, secureCookies)
+	runServer(httpPort, apiServer, isDev)
 }
 
-func startGrpcServer(port, caPath, certPath, keyPath string, nodeManager *nodes.Manager) {
+func startGrpcServer(port, caPath, certPath, keyPath string, nodeManager *nodes.Manager, allowInsecure bool) {
 	addr := ":" + port
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -62,7 +60,10 @@ func startGrpcServer(port, caPath, certPath, keyPath string, nodeManager *nodes.
 
 	creds, err := loadServerTLSCredentials(caPath, certPath, keyPath)
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to load TLS credentials, gRPC will be insecure")
+		if !allowInsecure {
+			log.Fatal().Err(err).Msg("failed to load TLS credentials")
+		}
+		log.Warn().Err(err).Msg("DEFT_DEV=true: failed to load TLS credentials, gRPC will be insecure")
 	}
 
 	var opts []grpc.ServerOption
@@ -79,7 +80,7 @@ func startGrpcServer(port, caPath, certPath, keyPath string, nodeManager *nodes.
 	}
 }
 
-func runProdServer(port string, apiServer *api.Server) {
+func runServer(port string, apiServer *api.Server, isDev bool) {
 	mux := http.NewServeMux()
 	apiServer.RegisterHandlers(mux)
 
@@ -90,7 +91,7 @@ func runProdServer(port string, apiServer *api.Server) {
 	mux.Handle("/", http.FileServer(http.FS(publicFS)))
 
 	addr := ":" + port
-	log.Info().Str("addr", addr).Msg("Deft Panel (UI & API) starting...")
+	log.Info().Str("addr", addr).Bool("dev", isDev).Msg("Deft Panel (UI & API) starting")
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal().Err(err).Msg("http server failed")
@@ -102,6 +103,14 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	value, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback
+	}
+	return value == "true" || value == "1" || value == "yes"
 }
 
 func loadServerTLSCredentials(caPath, certPath, keyPath string) (credentials.TransportCredentials, error) {

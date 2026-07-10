@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { auth } from '$lib/api/client';
 	import { navigating } from '$app/stores';
+	import { goto } from '$app/navigation';
 
 	let username = $state('');
 	let password = $state('');
@@ -12,7 +13,9 @@
 		const success = await auth.login(username, password);
 		if (!success) {
 			error = 'Invalid username or password.';
+			return;
 		}
+		goto('/');
 	};
 </script>
 
@@ -32,7 +35,7 @@
 		<p style="color: red;">{error}</p>
 	{/if}
 
-	<button type="submit" disabled={$navigating}>
+	<button type="submit" disabled={!!$navigating}>
 		{$navigating ? 'Logging in...' : 'Log In'}
 	</button>
 </form>

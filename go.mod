@@ -8,6 +8,7 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.10.2
+	golang.org/x/crypto v0.49.0
 	golang.org/x/text v0.35.0
 	google.golang.org/grpc v1.79.2
 	google.golang.org/protobuf v1.36.11
@@ -27,7 +28,6 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
@@ -47,7 +47,6 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.42.0 // indirect
 	go.opentelemetry.io/otel/metric v1.42.0 // indirect
 	go.opentelemetry.io/otel/trace v1.42.0 // indirect
-	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect

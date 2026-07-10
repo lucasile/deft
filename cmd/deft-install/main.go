@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,7 +24,7 @@ func main() {
 	if os.Geteuid() != 0 {
 		fmt.Println("This command must be run as root (or with sudo).")
 		fmt.Println("Attempting to elevate permissions with sudo...")
-		
+
 		executable, err := os.Executable()
 		if err != nil {
 			fmt.Printf("Failed to get executable path: %v\n", err)
@@ -35,7 +36,7 @@ func main() {
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		
+
 		if err = cmd.Run(); err != nil {
 			fmt.Printf("Elevation failed: %v\n", err)
 			os.Exit(1)
@@ -118,9 +119,9 @@ func promptDefault(label, defaultValue string) string {
 
 func runAgentInstall() {
 	log.Info().Msg(i18n.T("InstallStart", nil))
-	
+
 	installBinary("deft", defaultBinaryPath)
-	
+
 	daemonPath := "/usr/local/bin/deftd"
 	installBinary("deftd", daemonPath)
 
@@ -155,9 +156,9 @@ func runAgentInstall() {
 
 func runPanelInstall(httpPort, grpcPort string) {
 	log.Info().Msg("Installing Deft Panel via Docker...")
-	
+
 	image := "ghcr.io/lucasile/deft-panel:latest"
-	
+
 	log.Info().Str("image", image).Msg("Pulling panel image...")
 	if err := runCommand("docker", "pull", image); err != nil {
 		log.Warn().Err(err).Msg("Failed to pull remote image, checking for local image...")
@@ -175,7 +176,7 @@ func runPanelInstall(httpPort, grpcPort string) {
 		"-v", "/etc/deft:/etc/deft:ro",
 		"-v", "deft-panel-data:/data",
 		image)
-	
+
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start panel container")
 	} else {
@@ -218,7 +219,7 @@ func checkDocker() error {
 		return nil
 	}
 	log.Warn().Msg(i18n.T("DockerNotFound", nil))
-	return fmt.Errorf(i18n.T("DockerNotFound", nil))
+	return errors.New(i18n.T("DockerNotFound", nil))
 }
 
 func downloadFile(filepath string, url string) error {

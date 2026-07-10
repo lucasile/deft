@@ -43,6 +43,7 @@ North star: install panel, add a node, have a running Minecraft server in under 
 
 - Single static Go binary (`deftd`), zero runtime dependencies, no CGO
 - Managed by systemd as a background service (`deft.service`)
+- Intended model is one agent process per machine/node. Multiple agents on one host are only for dev/testing and must use unique `node_id` values and config files.
 - Command allowlist is hardcoded — cannot execute arbitrary host OS commands
 - File operations strictly scoped to `/var/lib/deft/volumes/`
 
@@ -73,6 +74,7 @@ North star: install panel, add a node, have a running Minecraft server in under 
 | Agent backend | Go 1.26+ |
 | Panel backend | Go 1.26+ |
 | Panel frontend | Svelte 5 + SvelteKit (Static mode) + Tailwind CSS |
+| Panel UI/forms | shadcn-style local components + Superforms SPA mode + Zod |
 | Agent-Panel protocol | gRPC + Protocol Buffers |
 | CLI | Cobra |
 | Logging | Zerolog |
@@ -107,7 +109,21 @@ deft/
 - Agent command allowlist is hardcoded
 - File access strictly within `/var/lib/deft/volumes/`
 - Mutual TLS on all communication
+- Production panel startup must fail if gRPC TLS credentials cannot load. Insecure gRPC is only allowed with explicit `DEFT_DEV=true`.
 - Self-hosted panel = zero Deft company access to nodes
+- SvelteKit is a static SPA in this repo. Do not put trusted production API/security logic in SvelteKit server routes unless the deployment architecture changes.
+- Browser/UI requests go to the Go REST API. The Go panel validates requests, enforces auth/authorization, records state, and sends typed gRPC `PanelCommand` messages to agents.
+- Superforms is allowed for panel form UX and client-side validation. Treat it as convenience only; the Go API remains the security boundary and must validate every mutation.
+- Never add a generic "run command" path from panel to agent. Add explicit protobuf messages and handler cases for each allowed operation.
+- The panel must not allow two live gRPC streams with the same `node_id`; duplicate active IDs are rejected.
+- Panel REST APIs require authentication. First-user registration is allowed only while the users table is empty; that user becomes `admin`.
+- Passwords are stored as bcrypt hashes. Never store or log plaintext passwords.
+- Browser auth uses SQLite-backed sessions in an HttpOnly `deft_session` cookie. Store only session token hashes in the database. Do not use localStorage for auth tokens.
+- Authenticated mutation endpoints require `X-CSRF-Token`. The token is session-bound and available from login response or `GET /api/auth/csrf`.
+- Auth and mutation endpoints have in-memory per-IP rate limits. Keep this as a baseline; use persistent/distributed limits only if panel deployment becomes multi-instance.
+- Audit security-sensitive actions to SQLite `audit_logs`, including auth attempts and container mutations. Do not log plaintext passwords, session tokens, or CSRF tokens.
+- Container actions must create `commands` rows before dispatch. Agent `CommandResult` messages complete those rows and update container status when possible. UI should poll `GET /api/commands/{commandID}` after mutations.
+- API handlers must limit JSON body size, reject unknown fields, and validate node IDs, command IDs, container names/IDs, and Docker image references before dispatching gRPC commands.
 
 ---
 
@@ -131,6 +147,12 @@ make panel      # Builds panel to bin/deft-panel
 make docker-panel # Builds local Docker image for the panel (needs sudo)
 make all        # Builds all
 ```
+
+## Local Development
+
+- Use `scripts/setup-test-auth.sh` to create local mTLS certs and `/etc/deft/agent.json`.
+- Use `scripts/run-dev-backend.sh` for local panel development. It sets `DEFT_DEV=true`, starts the Go REST API/UI on `:3000`, and starts gRPC on `:50051`.
+- `DEFT_DEV=true` does not move API logic into SvelteKit. SvelteKit remains a static SPA; Go remains the API/security/orchestration layer.
 
 ---
 

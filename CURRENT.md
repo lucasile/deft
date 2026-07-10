@@ -17,6 +17,18 @@
 - [x] Wire everything together in the `serve` command.
 - [x] Initial Panel Setup — Go backend with embedded SvelteKit static frontend.
 - [x] Modular Panel Backend — Reorganized into `internal/` (db, api, nodes) with `schema.sql`.
+- [x] Fixed current `go test ./...` blocker in installer (`errors.New` instead of dynamic `fmt.Errorf`).
+- [x] Confirmed frontend architecture — SvelteKit builds as a static SPA embedded in the Go panel binary.
+- [x] Added initial Go REST endpoints for node listing and typed container actions that dispatch over gRPC.
+- [x] Locked gRPC TLS behavior — production fails if TLS credentials are missing; insecure gRPC requires explicit `DEFT_DEV=true`.
+- [x] Added first-user auth foundation — users table, bcrypt password hashes, SQLite-backed sessions, HttpOnly cookies, and admin-only API middleware.
+- [x] Added CSRF protection for authenticated mutation endpoints.
+- [x] Added in-memory rate limiting for auth and mutation endpoints.
+- [x] Added SQLite audit logs for auth and container mutation attempts.
+- [x] Added command result tracking — commands are recorded as pending, completed from agent `CommandResult`, and exposed via `GET /api/commands/{commandID}`.
+- [x] Hardened API input parsing — body size limits, unknown JSON field rejection, and validation for node IDs, command IDs, container names/IDs, and image references.
+- [x] Built initial Svelte dashboard — node list, create/start/stop/remove controls, command status polling, and cookie/CSRF API client wiring.
+- [x] Adopted shadcn-style local Svelte UI components and Superforms SPA-mode validation for panel forms.
 
 ## Current Task
 **Implement Panel gRPC Server & REST API Core**
@@ -34,7 +46,13 @@ The panel should:
 
 
 ## Blockers / Notes
-- None yet
+- SvelteKit is UI-only for this architecture. Production API/security logic belongs in the Go panel unless the deployment model changes.
+- Frontend forms may use Superforms for UX/client validation, but Go API validation remains the security boundary.
+- Browser/UI -> Go REST API -> Go node manager -> gRPC stream -> agent -> Docker.
+- Keep panel-to-agent operations typed and allowlisted through protobuf. Do not add arbitrary host command execution.
+- One installed agent per machine is the intended model. Dev/test multi-agent runs must use unique `node_id` values.
+- Production gRPC must use mTLS. Insecure gRPC is only for local development with `DEFT_DEV=true`.
+- Dashboard is functional for the current backend core. It uses local shadcn-style components under `internal/panel/ui/web/src/lib/components/ui`. It still needs container listing, clearer empty/setup states, and production UI polish.
 
 ## Last Updated
-Project start
+2026-07-09

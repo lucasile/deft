@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/lucasile/deft/internal/agent/config"
 	"github.com/lucasile/deft/internal/agent/docker"
@@ -39,17 +40,25 @@ func main() {
 	}
 
 	handler := tunnel.NewHandler(dockerClient, conn, cfg.NodeID)
+	reconnectBackoff := 1 * time.Second
+	maxReconnectBackoff := 60 * time.Second
 
 	for {
 		cmd, err := conn.Receive()
 		if err != nil {
-			log.Error().Err(err).Msg("connection lost, reconnecting...")
+			log.Error().Err(err).Dur("retry_in", reconnectBackoff).Msg("connection lost, reconnecting")
+			time.Sleep(reconnectBackoff)
+			reconnectBackoff *= 2
+			if reconnectBackoff > maxReconnectBackoff {
+				reconnectBackoff = maxReconnectBackoff
+			}
 			if err := conn.Connect(ctx, cfg.NodeID); err != nil {
 				log.Fatal().Err(err).Msg("failed to reconnect")
 			}
 			continue
 		}
 
+		reconnectBackoff = 1 * time.Second
 		go handler.HandleCommand(ctx, cmd)
 	}
 }
