@@ -107,7 +107,9 @@ func (m *Manager) Connect(stream proto.AgentService_ConnectServer) error {
 			}
 		}
 
-		_, _ = m.db.Exec("UPDATE nodes SET last_seen = ? WHERE id = ?", time.Now().Unix(), nodeID)
+		if _, err := m.db.Exec("UPDATE nodes SET last_seen = ? WHERE id = ?", time.Now().Unix(), nodeID); err != nil {
+			log.Error().Err(err).Str("node_id", nodeID).Msg("failed to update node heartbeat")
+		}
 	}
 }
 

@@ -27,6 +27,12 @@ func main() {
 
 	isDev := getEnvBool("DEFT_DEV", false)
 
+	defaultHost := "0.0.0.0"
+	if isDev {
+		defaultHost = "127.0.0.1"
+	}
+	grpcHost := getEnv("DEFT_GRPC_HOST", defaultHost)
+	httpHost := getEnv("DEFT_HTTP_HOST", defaultHost)
 	grpcPort := getEnv("DEFT_GRPC_PORT", "50051")
 	httpPort := getEnv("DEFT_HTTP_PORT", "3000")
 	dbPath := getEnv("DEFT_DB_PATH", "panel.db")
@@ -45,14 +51,14 @@ func main() {
 	authService := auth.NewService(database)
 	auditLogger := audit.NewLogger(database)
 
-	go startGrpcServer(grpcPort, caPath, certPath, keyPath, nodeManager, isDev)
+	go startGrpcServer(grpcHost, grpcPort, caPath, certPath, keyPath, nodeManager, isDev)
 
 	apiServer := api.NewServer(nodeManager, authService, auditLogger, secureCookies)
-	runServer(httpPort, apiServer, isDev)
+	runServer(httpHost, httpPort, apiServer, isDev)
 }
 
-func startGrpcServer(port, caPath, certPath, keyPath string, nodeManager *nodes.Manager, allowInsecure bool) {
-	addr := ":" + port
+func startGrpcServer(host, port, caPath, certPath, keyPath string, nodeManager *nodes.Manager, allowInsecure bool) {
+	addr := net.JoinHostPort(host, port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatal().Err(err).Str("addr", addr).Msg("failed to listen for gRPC")
@@ -80,7 +86,7 @@ func startGrpcServer(port, caPath, certPath, keyPath string, nodeManager *nodes.
 	}
 }
 
-func runServer(port string, apiServer *api.Server, isDev bool) {
+func runServer(host, port string, apiServer *api.Server, isDev bool) {
 	mux := http.NewServeMux()
 	apiServer.RegisterHandlers(mux)
 
@@ -90,7 +96,7 @@ func runServer(port string, apiServer *api.Server, isDev bool) {
 	}
 	mux.Handle("/", http.FileServer(http.FS(publicFS)))
 
-	addr := ":" + port
+	addr := net.JoinHostPort(host, port)
 	log.Info().Str("addr", addr).Bool("dev", isDev).Msg("Deft Panel (UI & API) starting")
 
 	if err := http.ListenAndServe(addr, mux); err != nil {

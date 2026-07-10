@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -21,8 +22,16 @@ func Init(path string) (*DB, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(0)
+
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	if err := configureSQLite(db); err != nil {
+		return nil, err
 	}
 
 	if _, err := db.Exec(schema); err != nil {
@@ -34,6 +43,25 @@ func Init(path string) (*DB, error) {
 	}
 
 	return &DB{db}, nil
+}
+
+func configureSQLite(db *sql.DB) error {
+	pragmas := []string{
+		"PRAGMA busy_timeout = 5000",
+		"PRAGMA journal_mode = WAL",
+		"PRAGMA synchronous = NORMAL",
+		"PRAGMA foreign_keys = ON",
+	}
+
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
+			return fmt.Errorf("failed to configure sqlite %q: %w", pragma, err)
+		}
+	}
+
+	db.SetConnMaxIdleTime(5 * time.Minute)
+
+	return nil
 }
 
 func applyMigrations(db *sql.DB) error {

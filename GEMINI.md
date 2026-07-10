@@ -110,6 +110,7 @@ deft/
 - File access strictly within `/var/lib/deft/volumes/`
 - Mutual TLS on all communication
 - Production panel startup must fail if gRPC TLS credentials cannot load. Insecure gRPC is only allowed with explicit `DEFT_DEV=true`.
+- In dev mode, panel listeners must default to loopback only (`127.0.0.1`). Requiring explicit `DEFT_HTTP_HOST`/`DEFT_GRPC_HOST` overrides prevents accidental insecure exposure.
 - Self-hosted panel = zero Deft company access to nodes
 - SvelteKit is a static SPA in this repo. Do not put trusted production API/security logic in SvelteKit server routes unless the deployment architecture changes.
 - Browser/UI requests go to the Go REST API. The Go panel validates requests, enforces auth/authorization, records state, and sends typed gRPC `PanelCommand` messages to agents.
@@ -124,6 +125,7 @@ deft/
 - Audit security-sensitive actions to SQLite `audit_logs`, including auth attempts and container mutations. Do not log plaintext passwords, session tokens, or CSRF tokens.
 - Container actions must create `commands` rows before dispatch. Agent `CommandResult` messages complete those rows and update container status when possible. UI should poll `GET /api/commands/{commandID}` after mutations.
 - API handlers must limit JSON body size, reject unknown fields, and validate node IDs, command IDs, container names/IDs, and Docker image references before dispatching gRPC commands.
+- SQLite access must stay serialized for the single-process panel: one open DB connection, WAL mode, and a busy timeout. Command results must not be lost to transient `SQLITE_BUSY` errors.
 
 ---
 
@@ -151,7 +153,7 @@ make all        # Builds all
 ## Local Development
 
 - Use `scripts/setup-test-auth.sh` to create local mTLS certs and `/etc/deft/agent.json`.
-- Use `scripts/run-dev-backend.sh` for local panel development. It sets `DEFT_DEV=true`, starts the Go REST API/UI on `:3000`, and starts gRPC on `:50051`.
+- Use `scripts/run-dev-backend.sh` for local panel development. It sets `DEFT_DEV=true`, starts the Go REST API/UI on `127.0.0.1:3000`, and starts gRPC on `127.0.0.1:50051`.
 - `DEFT_DEV=true` does not move API logic into SvelteKit. SvelteKit remains a static SPA; Go remains the API/security/orchestration layer.
 
 ---
