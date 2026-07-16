@@ -27,6 +27,7 @@ func TestHandlerServesExtensionlessStaticRoutes(t *testing.T) {
 		{path: "/login", want: "login", code: http.StatusOK},
 		{path: "/register", want: "register", code: http.StatusOK},
 		{path: "/nodes/node_123", want: "index", code: http.StatusOK},
+		{path: "/nodes/node_123/containers/new", want: "index", code: http.StatusOK},
 		{path: "/nodes/node_123/containers/container_456", want: "index", code: http.StatusOK},
 		{path: "/nodes/join/request-id", want: "index", code: http.StatusOK},
 		{path: "/_app/immutable/chunks/_chunk.js", want: "chunk", code: http.StatusOK},

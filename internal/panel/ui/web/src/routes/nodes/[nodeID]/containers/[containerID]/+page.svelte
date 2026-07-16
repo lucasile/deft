@@ -366,7 +366,7 @@
 				<CardHeader class="flex flex-row items-center justify-between">
 					<div>
 						<CardTitle>Logs</CardTitle>
-						<p class="text-sm text-zinc-400">{logLive ? 'Live stream' : 'Last 200 lines'}</p>
+						<p class="text-sm text-zinc-400">{logLive ? 'Live' : 'Not connected'}</p>
 					</div>
 					<Button type="button" variant="outline" size="sm" disabled={busy || !canAct} onclick={startLiveLogs}>
 						<RefreshCw size={14} />

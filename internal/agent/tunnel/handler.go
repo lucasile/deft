@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/go-connections/nat"
 	"github.com/lucasile/deft/internal/agent/docker"
 	"github.com/lucasile/deft/internal/agent/docker/console"
 	dockercontainer "github.com/lucasile/deft/internal/agent/docker/container"
@@ -47,7 +48,7 @@ func (h *Handler) HandleCommand(ctx context.Context, cmd *proto.PanelCommand) er
 		if displayName == "" {
 			displayName = a.Create.Name
 		}
-		_, err = dockercontainer.Create(ctx, h.docker, a.Create.Name, a.Create.Image, &container.Config{
+		containerConfig := &container.Config{
 			Image: a.Create.Image,
 			Labels: map[string]string{
 				dockercontainer.LabelManaged:    "true",
@@ -55,7 +56,15 @@ func (h *Handler) HandleCommand(ctx context.Context, cmd *proto.PanelCommand) er
 				dockercontainer.LabelName:       displayName,
 				dockercontainer.LabelResourceID: a.Create.ResourceId,
 			},
-		}, &container.HostConfig{})
+			Env:          dockerEnv(a.Create.Env),
+			ExposedPorts: dockerExposedPorts(a.Create.Ports),
+		}
+		hostConfig := &container.HostConfig{
+			PortBindings:  dockerPortBindings(a.Create.Ports),
+			Binds:         dockerBinds(a.Create.Volumes),
+			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyMode(a.Create.RestartPolicy)},
+		}
+		_, err = dockercontainer.Create(ctx, h.docker, a.Create.Name, a.Create.Image, containerConfig, hostConfig)
 		msg = "Container created"
 	case *proto.PanelCommand_Start:
 		err = dockercontainer.Start(ctx, h.docker, a.Start.Id)
@@ -121,6 +130,64 @@ func (h *Handler) HandleCommand(ctx context.Context, cmd *proto.PanelCommand) er
 	}
 
 	return nil
+}
+
+func dockerEnv(items []*proto.EnvVar) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	env := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.GetKey() == "" {
+			continue
+		}
+		env = append(env, item.GetKey()+"="+item.GetValue())
+	}
+	return env
+}
+
+func dockerExposedPorts(items []*proto.PortMapping) nat.PortSet {
+	if len(items) == 0 {
+		return nil
+	}
+	ports := nat.PortSet{}
+	for _, item := range items {
+		port := nat.Port(fmt.Sprintf("%d/%s", item.GetContainerPort(), item.GetProtocol()))
+		ports[port] = struct{}{}
+	}
+	return ports
+}
+
+func dockerPortBindings(items []*proto.PortMapping) nat.PortMap {
+	if len(items) == 0 {
+		return nil
+	}
+	bindings := nat.PortMap{}
+	for _, item := range items {
+		port := nat.Port(fmt.Sprintf("%d/%s", item.GetContainerPort(), item.GetProtocol()))
+		bindings[port] = append(bindings[port], nat.PortBinding{
+			HostPort: fmt.Sprintf("%d", item.GetHostPort()),
+		})
+	}
+	return bindings
+}
+
+func dockerBinds(items []*proto.VolumeMount) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	binds := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.GetHostPath() == "" || item.GetContainerPath() == "" {
+			continue
+		}
+		mode := "rw"
+		if item.GetReadOnly() {
+			mode = "ro"
+		}
+		binds = append(binds, item.GetHostPath()+":"+item.GetContainerPath()+":"+mode)
+	}
+	return binds
 }
 
 func (h *Handler) startLogStream(ctx context.Context, streamID, containerID string, tailLines int) error {
@@ -210,10 +277,11 @@ func (h *Handler) SendContainerInventory(ctx context.Context) error {
 	summaries := make([]*proto.ContainerSummary, 0, len(containers))
 	for _, item := range containers {
 		summaries = append(summaries, &proto.ContainerSummary{
-			Id:     item.ID,
-			Name:   item.Name,
-			Image:  item.Image,
-			Status: item.Status,
+			Id:         item.ID,
+			Name:       item.Name,
+			Image:      item.Image,
+			Status:     item.Status,
+			ResourceId: item.ResourceID,
 		})
 	}
 

@@ -148,6 +148,60 @@ func TestSyncContainersReplacesPlaceholdersAndDeletesMissing(t *testing.T) {
 	}
 }
 
+func TestSyncContainersLinksServerByResourceID(t *testing.T) {
+	tempDir := t.TempDir()
+	database, err := db.Init(filepath.Join(tempDir, "panel.db"))
+	if err != nil {
+		t.Fatalf("init db: %v", err)
+	}
+	defer database.Close()
+
+	if _, err := database.Exec(
+		"INSERT INTO nodes (id, name, last_seen) VALUES (?, ?, ?)",
+		"node-a",
+		"Node A",
+		time.Now().Unix(),
+	); err != nil {
+		t.Fatalf("insert node: %v", err)
+	}
+	if _, err := database.Exec(
+		`INSERT INTO servers (id, name, node_id, image, status, desired_config_json, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		"resource-a",
+		"minecraft-1",
+		"node-a",
+		"itzg/minecraft-server:latest",
+		"create_requested",
+		"{}",
+		time.Now().Unix(),
+		time.Now().Unix(),
+	); err != nil {
+		t.Fatalf("insert server: %v", err)
+	}
+
+	manager := NewManager(database, nil, false)
+	if err := manager.SyncContainers("node-a", []*proto.ContainerSummary{
+		{
+			Id:         "docker-container-id",
+			Name:       "minecraft-1",
+			Image:      "itzg/minecraft-server:latest",
+			Status:     "running",
+			ResourceId: "resource-a",
+		},
+	}); err != nil {
+		t.Fatalf("sync containers: %v", err)
+	}
+
+	var containerID string
+	var status string
+	if err := database.QueryRow("SELECT container_id, status FROM servers WHERE id = ?", "resource-a").Scan(&containerID, &status); err != nil {
+		t.Fatalf("load server: %v", err)
+	}
+	if containerID != "docker-container-id" || status != "running" {
+		t.Fatalf("server link = (%q, %q), want docker-container-id/running", containerID, status)
+	}
+}
+
 func TestDeleteContainerRemovesActiveContainer(t *testing.T) {
 	tempDir := t.TempDir()
 	database, err := db.Init(filepath.Join(tempDir, "panel.db"))

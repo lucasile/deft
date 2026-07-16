@@ -308,6 +308,9 @@ func (m *Manager) RemoveNode(nodeID string) error {
 	if _, err := tx.Exec("UPDATE join_requests SET approved_node_id = NULL WHERE approved_node_id = ?", nodeID); err != nil {
 		return fmt.Errorf("failed to detach join requests: %w", err)
 	}
+	if _, err := tx.Exec("DELETE FROM servers WHERE node_id = ?", nodeID); err != nil {
+		return fmt.Errorf("failed to delete node servers: %w", err)
+	}
 	if _, err := tx.Exec("DELETE FROM containers WHERE node_id = ?", nodeID); err != nil {
 		return fmt.Errorf("failed to delete node containers: %w", err)
 	}
@@ -468,9 +471,34 @@ func (m *Manager) SyncContainers(nodeID string, inventory []*proto.ContainerSumm
 		); err != nil {
 			return fmt.Errorf("failed to sync container: %w", err)
 		}
+
+		if item.GetResourceId() != "" {
+			if _, err := tx.Exec(
+				`UPDATE servers
+				 SET container_id = ?, status = ?, updated_at = ?
+				 WHERE id = ? AND node_id = ?`,
+				item.GetId(),
+				item.GetStatus(),
+				time.Now().Unix(),
+				item.GetResourceId(),
+				nodeID,
+			); err != nil {
+				return fmt.Errorf("failed to sync server container link: %w", err)
+			}
+		}
 	}
 
 	if len(ids) == 0 {
+		if _, err := tx.Exec(
+			`UPDATE servers
+			 SET container_id = NULL, status = ?, updated_at = ?
+			 WHERE node_id = ? AND container_id IS NOT NULL`,
+			"missing",
+			time.Now().Unix(),
+			nodeID,
+		); err != nil {
+			return fmt.Errorf("failed to mark missing server containers: %w", err)
+		}
 		if _, err := tx.Exec(
 			`DELETE FROM containers
 			 WHERE node_id = ?`,
@@ -484,6 +512,14 @@ func (m *Manager) SyncContainers(nodeID string, inventory []*proto.ContainerSumm
 		args = append(args, nodeID)
 		for _, id := range ids {
 			args = append(args, id)
+		}
+		if _, err := tx.Exec(
+			`UPDATE servers
+			 SET container_id = NULL, status = ?, updated_at = ?
+			 WHERE node_id = ? AND container_id IS NOT NULL AND container_id NOT IN (`+placeholders+`)`,
+			append([]any{"missing", time.Now().Unix()}, args...)...,
+		); err != nil {
+			return fmt.Errorf("failed to mark missing server containers: %w", err)
 		}
 		if _, err := tx.Exec(
 			`DELETE FROM containers
@@ -554,6 +590,19 @@ func (m *Manager) CompleteCommand(commandID string, success bool, message string
 		return fmt.Errorf("failed to complete command: %w", err)
 	}
 
+	if action == "container.create" && !success {
+		if _, err := m.db.Exec(
+			`UPDATE servers
+			 SET status = ?, updated_at = ?
+			 WHERE id = ?`,
+			"failed",
+			time.Now().Unix(),
+			commandID,
+		); err != nil {
+			return fmt.Errorf("failed to mark server create failed: %w", err)
+		}
+	}
+
 	if success && targetID.Valid {
 		if action == "container.remove" {
 			if err := m.DeleteContainer(nodeID, targetID.String); err != nil {
@@ -570,6 +619,18 @@ func (m *Manager) CompleteCommand(commandID string, success bool, message string
 }
 
 func (m *Manager) DeleteContainer(nodeID, containerID string) error {
+	if _, err := m.db.Exec(
+		`UPDATE servers
+		 SET container_id = NULL, status = ?, updated_at = ?
+		 WHERE node_id = ? AND container_id = ?`,
+		"removed",
+		time.Now().Unix(),
+		nodeID,
+		containerID,
+	); err != nil {
+		return fmt.Errorf("failed to detach removed server container: %w", err)
+	}
+
 	_, err := m.db.Exec(
 		`DELETE FROM containers
 		 WHERE node_id = ? AND id = ?`,

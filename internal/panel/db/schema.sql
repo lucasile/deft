@@ -16,6 +16,20 @@ CREATE TABLE IF NOT EXISTS containers (
     FOREIGN KEY(node_id) REFERENCES nodes(id)
 );
 
+CREATE TABLE IF NOT EXISTS servers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    container_id TEXT,
+    image TEXT NOT NULL,
+    status TEXT NOT NULL,
+    desired_config_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(node_id) REFERENCES nodes(id),
+    FOREIGN KEY(container_id) REFERENCES containers(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     username TEXT NOT NULL UNIQUE,

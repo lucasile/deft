@@ -37,6 +37,9 @@
 - [x] Scoped container management to Deft-owned containers: created containers get `deft.managed=true` labels, agents sync only labeled Docker containers, and panel inventory reconciles those rows.
 - [x] Decoupled user-facing container/server names from Docker names. Panel generates Deft-owned Docker names (`deft-...`) and stores the friendly name in labels/inventory.
 - [x] Added live container logs on the container detail page. The browser requests a short-lived stream ID with a CSRF-protected POST, then opens an authenticated SSE stream; the panel sends typed gRPC follow/cancel commands to the agent and cancels the Docker log follow when the browser disconnects.
+- [x] Added basic container configuration at create time: port mappings, environment variables, volume mounts, and restart policy. Volume host paths are intentionally restricted to `/var/lib/deft/volumes/...`.
+- [x] Moved the expanded container create form to `/nodes/{nodeID}/containers/new` so the node page stays focused on agent status and the container list.
+- [x] Added the first server abstraction foundation: `servers` table, server manager, `GET /api/servers`, `GET /api/servers/{serverID}`, create-time server records, and inventory-based linking from server resource IDs to real Docker container IDs.
 
 ## Current Task
 **Implement Panel gRPC Server & REST API Core**
@@ -63,6 +66,8 @@ The panel should:
 - Keep panel-to-agent operations typed and allowlisted through protobuf. Do not add arbitrary host command execution.
 - Deft should manage labeled containers by default. Do not treat every Docker container on the host as managed; unmanaged discovery should be explicit and read-only at first.
 - User-facing names are display names, not Docker container names. Docker names should be generated and treated as implementation details.
+- Servers are the intended product object. Containers are implementation detail/debug surface. New game, WireGuard, backups, and settings work should attach to servers first.
+- Do not allow arbitrary host path mounts from the panel. Deft-created volume mounts should stay under `/var/lib/deft/volumes/...` unless a future explicit admin-only escape hatch is designed and audited.
 - One installed agent per machine is the intended model. Dev/test multi-agent runs must use unique `node_id` values.
 - Production gRPC must use mTLS. Insecure gRPC is only for local development with `DEFT_DEV=true`.
 - Deft has no global panel authority. Each self-hosted panel is its own trust root and issues its own agent join tokens/certificates.

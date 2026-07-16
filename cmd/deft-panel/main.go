@@ -15,6 +15,7 @@ import (
 	"github.com/lucasile/deft/internal/panel/events"
 	"github.com/lucasile/deft/internal/panel/join"
 	"github.com/lucasile/deft/internal/panel/nodes"
+	"github.com/lucasile/deft/internal/panel/servers"
 	"github.com/lucasile/deft/internal/panel/ui"
 	"github.com/lucasile/deft/internal/proto"
 	"github.com/rs/zerolog"
@@ -53,6 +54,7 @@ func main() {
 
 	eventHub := events.NewHub()
 	nodeManager := nodes.NewManager(database, eventHub, !isDev)
+	serverManager := servers.NewManager(database)
 	authService := auth.NewService(database)
 	auditLogger := audit.NewLogger(database)
 	joinService := join.NewService(database, caPath, caKeyPath, publicGrpcAddr)
@@ -65,7 +67,7 @@ func main() {
 
 	go startGrpcServer(grpcHost, grpcPort, caPath, certPath, keyPath, nodeManager, isDev)
 
-	apiServer := api.NewServer(nodeManager, authService, auditLogger, eventHub, joinService, secureCookies)
+	apiServer := api.NewServer(nodeManager, serverManager, authService, auditLogger, eventHub, joinService, secureCookies)
 	runServer(httpHost, httpPort, apiServer, isDev)
 }
 

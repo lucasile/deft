@@ -3,16 +3,11 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ArrowLeft, Clock3, LogOut, Plus, Power, RefreshCw, Trash2 } from '@lucide/svelte';
-	import { defaults, superForm } from 'sveltekit-superforms';
-	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { auth, panel, type Container, type Node, type PanelEventPayload } from '$lib/api/client';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
-	import { Input } from '$lib/components/ui/input';
-	import { Label } from '$lib/components/ui/label';
-	import { createContainerSchema } from '$lib/schemas';
 
 	let nodes = $state<Node[]>([]);
 	let containers = $state<Container[]>([]);
@@ -20,7 +15,6 @@
 	let loading = $state(true);
 	let containersLoading = $state(false);
 	let busy = $state(false);
-	let createSubmitting = $state(false);
 	let error = $state<string | null>(null);
 	let confirmAction = $state<'stop-agent' | 'remove-agent' | null>(null);
 	let pendingCreates = $state<Record<string, Container>>({});
@@ -29,47 +23,8 @@
 	const selectedNode = $derived(nodes.find((node) => node.id === nodeID));
 	const visibleContainers = $derived([...Object.values(pendingCreates), ...containers]);
 
-	const createContainerForm = superForm(
-		defaults({ name: 'hello-nginx', image: 'nginx:alpine' }, zod4(createContainerSchema)),
-		{
-			SPA: true,
-			validators: zod4(createContainerSchema),
-			async onUpdate({ form }) {
-				if (!form.valid || createSubmitting || !nodeID) return;
-
-				createSubmitting = true;
-				error = null;
-				try {
-					const response = await panel.createContainer(nodeID, form.data.name, form.data.image);
-					pendingCreates = {
-						...pendingCreates,
-						[response.command_id]: {
-							id: response.command_id,
-							node_id: nodeID,
-							name: form.data.name,
-							image: form.data.image,
-							status: 'create_requested',
-						},
-					};
-					await loadNodes({ quiet: true });
-					await loadContainers({ quiet: true });
-				} catch (err) {
-					error = cleanError(err);
-				} finally {
-					createSubmitting = false;
-				}
-			},
-		},
-	);
-
-	const {
-		form: createForm,
-		errors: createErrors,
-		constraints: createConstraints,
-		enhance: enhanceCreate,
-	} = createContainerForm;
-
 	onMount(() => {
+		loadPendingCreates();
 		void loadNodes();
 		void loadContainers({ quiet: true });
 
@@ -162,6 +117,21 @@
 		await loadContainers({ quiet: true });
 	};
 
+	const loadPendingCreates = () => {
+		if (!nodeID) return;
+		const storageKey = pendingCreateStorageKey(nodeID);
+		const rawValue = sessionStorage.getItem(storageKey);
+		if (!rawValue) return;
+		sessionStorage.removeItem(storageKey);
+
+		try {
+			const pending = JSON.parse(rawValue) as Container[];
+			pendingCreates = Object.fromEntries(pending.map((container) => [container.id, container]));
+		} catch {
+			pendingCreates = {};
+		}
+	};
+
 	const removeNode = async () => {
 		if (!selectedNode || selectedNode.connected) return;
 
@@ -213,6 +183,8 @@
 			return {};
 		}
 	};
+
+	const pendingCreateStorageKey = (id: string) => `deft.pending-creates.${id}`;
 </script>
 
 <svelte:head>
@@ -306,60 +278,21 @@
 
 		<section class="space-y-6">
 			<Card>
-				<CardHeader>
-					<CardTitle>Create Container</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<form class="space-y-4" method="POST" use:enhanceCreate>
-						<div>
-							<Label for="container-name">Name</Label>
-							<Input
-								id="container-name"
-								name="name"
-								bind:value={$createForm.name}
-								autocomplete="off"
-								aria-invalid={$createErrors.name ? 'true' : undefined}
-								{...$createConstraints.name}
-							/>
-							{#if $createErrors.name}
-								<p class="mt-1 text-sm text-red-300">{$createErrors.name[0]}</p>
-							{/if}
-						</div>
-						<div>
-							<Label for="container-image">Image</Label>
-							<Input
-								id="container-image"
-								name="image"
-								bind:value={$createForm.image}
-								autocomplete="off"
-								aria-invalid={$createErrors.image ? 'true' : undefined}
-								{...$createConstraints.image}
-							/>
-							{#if $createErrors.image}
-								<p class="mt-1 text-sm text-red-300">{$createErrors.image[0]}</p>
-							{/if}
-						</div>
-						<Button type="submit" class="w-full" disabled={busy || createSubmitting || !selectedNode?.connected}>
-							<Plus size={16} />
-							Create
-						</Button>
-						{#if selectedNode && !selectedNode.connected}
-							<p class="text-xs text-zinc-500">Start the agent before creating containers.</p>
-						{/if}
-					</form>
-				</CardContent>
-			</Card>
-
-			<Card>
 				<CardHeader class="flex flex-row items-center justify-between">
 					<div>
 						<CardTitle>Containers</CardTitle>
 						<p class="text-sm text-zinc-400">{visibleContainers.length} known on this agent</p>
 					</div>
-					<Button type="button" variant="outline" size="sm" disabled={containersLoading} onclick={() => void loadContainers()}>
-						<RefreshCw size={14} />
-						Refresh
-					</Button>
+					<div class="flex gap-2">
+						<Button type="button" size="sm" disabled={!selectedNode?.connected} onclick={() => goto(`/nodes/${nodeID}/containers/new`)}>
+							<Plus size={14} />
+							Create
+						</Button>
+						<Button type="button" variant="outline" size="sm" disabled={containersLoading} onclick={() => void loadContainers()}>
+							<RefreshCw size={14} />
+							Refresh
+						</Button>
+					</div>
 				</CardHeader>
 
 				{#if containersLoading}

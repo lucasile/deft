@@ -21,10 +21,11 @@ const (
 )
 
 type Summary struct {
-	ID     string
-	Name   string
-	Image  string
-	Status string
+	ID         string
+	Name       string
+	Image      string
+	Status     string
+	ResourceID string
 }
 
 func Create(ctx context.Context, c *docker.Client, name, imgName string, config *container.Config, hostConfig *container.HostConfig) (string, error) {
@@ -62,10 +63,11 @@ func ListManaged(ctx context.Context, c *docker.Client, nodeID string) ([]Summar
 			name = strings.TrimPrefix(item.Names[0], "/")
 		}
 		result = append(result, Summary{
-			ID:     item.ID,
-			Name:   name,
-			Image:  item.Image,
-			Status: panelStatus(item.State),
+			ID:         item.ID,
+			Name:       name,
+			Image:      item.Image,
+			Status:     panelStatus(item.State),
+			ResourceID: item.Labels[LabelResourceID],
 		})
 	}
 

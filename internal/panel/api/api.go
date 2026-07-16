@@ -17,12 +17,14 @@ import (
 	"github.com/lucasile/deft/internal/panel/events"
 	"github.com/lucasile/deft/internal/panel/join"
 	"github.com/lucasile/deft/internal/panel/nodes"
+	"github.com/lucasile/deft/internal/panel/servers"
 	"github.com/lucasile/deft/internal/proto"
 	"github.com/rs/zerolog/log"
 )
 
 type Server struct {
 	nodeManager   *nodes.Manager
+	serverManager *servers.Manager
 	auth          *auth.Service
 	audit         *audit.Logger
 	events        *events.Hub
@@ -42,6 +44,7 @@ type liveLogToken struct {
 
 func NewServer(
 	nodeManager *nodes.Manager,
+	serverManager *servers.Manager,
 	authService *auth.Service,
 	auditLogger *audit.Logger,
 	eventHub *events.Hub,
@@ -50,6 +53,7 @@ func NewServer(
 ) *Server {
 	return &Server{
 		nodeManager:   nodeManager,
+		serverManager: serverManager,
 		auth:          authService,
 		audit:         auditLogger,
 		events:        eventHub,
@@ -80,6 +84,8 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/events", s.requireAuth(s.handleEvents))
 	mux.HandleFunc("GET /api/commands", s.requireAuth(s.handleListCommands))
 	mux.HandleFunc("GET /api/commands/{commandID}", s.requireAuth(s.handleGetCommand))
+	mux.HandleFunc("GET /api/servers", s.requireAuth(s.handleListServers))
+	mux.HandleFunc("GET /api/servers/{serverID}", s.requireAuth(s.handleGetServer))
 	mux.HandleFunc("GET /api/nodes/{nodeID}/containers", s.requireAuth(s.handleListContainers))
 	mux.HandleFunc("POST /api/nodes/{nodeID}/containers", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleCreateContainer))))
 	mux.HandleFunc("POST /api/nodes/{nodeID}/containers/{containerID}/start", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStartContainer))))
@@ -105,12 +111,33 @@ type csrfResponse struct {
 }
 
 type createContainerRequest struct {
-	Name  string `json:"name"`
-	Image string `json:"image"`
+	Name          string               `json:"name"`
+	Image         string               `json:"image"`
+	Ports         []portMappingRequest `json:"ports,omitempty"`
+	Env           []envVarRequest      `json:"env,omitempty"`
+	Volumes       []volumeMountRequest `json:"volumes,omitempty"`
+	RestartPolicy string               `json:"restart_policy,omitempty"`
 }
 
 type commandResponse struct {
 	CommandID string `json:"command_id"`
+}
+
+type portMappingRequest struct {
+	HostPort      int    `json:"host_port"`
+	ContainerPort int    `json:"container_port"`
+	Protocol      string `json:"protocol"`
+}
+
+type envVarRequest struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+type volumeMountRequest struct {
+	HostPath      string `json:"host_path"`
+	ContainerPath string `json:"container_path"`
+	ReadOnly      bool   `json:"read_only,omitempty"`
 }
 
 type logStreamResponse struct {
@@ -598,6 +625,32 @@ func (s *Server) handleGetCommand(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, command)
 }
 
+func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
+	serverList, err := s.serverManager.List()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, serverList)
+}
+
+func (s *Server) handleGetServer(w http.ResponseWriter, r *http.Request) {
+	serverID := strings.TrimSpace(r.PathValue("serverID"))
+	if err := validateCommandID(serverID); err != nil {
+		http.Error(w, "invalid server id", http.StatusBadRequest)
+		return
+	}
+
+	server, err := s.serverManager.Get(serverID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, server)
+}
+
 func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
 	s.handleContainerCommand(w, r, func(commandID, containerID string) *proto.PanelCommand {
 		return &proto.PanelCommand{
@@ -793,12 +846,19 @@ func (s *Server) handleCreateContainer(w http.ResponseWriter, r *http.Request) {
 
 	req.Name = strings.TrimSpace(req.Name)
 	req.Image = strings.TrimSpace(req.Image)
+	req.RestartPolicy = strings.TrimSpace(req.RestartPolicy)
 	if err := validateContainerName(req.Name); err != nil {
 		s.auditCurrentUser(r, "container.create", nodeID, req.Name, "", false, err.Error())
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if err := validateImage(req.Image); err != nil {
+		s.auditCurrentUser(r, "container.create", nodeID, req.Name, "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	containerConfig, err := validateCreateContainerConfig(req)
+	if err != nil {
 		s.auditCurrentUser(r, "container.create", nodeID, req.Name, "", false, err.Error())
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -816,10 +876,14 @@ func (s *Server) handleCreateContainer(w http.ResponseWriter, r *http.Request) {
 		CommandId: commandID,
 		Action: &proto.PanelCommand_Create{
 			Create: &proto.CreateContainer{
-				Name:        dockerName,
-				Image:       req.Image,
-				DisplayName: req.Name,
-				ResourceId:  commandID,
+				Name:          dockerName,
+				Image:         req.Image,
+				DisplayName:   req.Name,
+				ResourceId:    commandID,
+				Ports:         containerConfig.ports,
+				Env:           containerConfig.env,
+				Volumes:       containerConfig.volumes,
+				RestartPolicy: containerConfig.restartPolicy,
 			},
 		},
 	}
@@ -830,9 +894,24 @@ func (s *Server) handleCreateContainer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := s.serverManager.Create(servers.CreateRequest{
+		ID:            commandID,
+		Name:          req.Name,
+		NodeID:        nodeID,
+		Image:         req.Image,
+		Status:        "create_requested",
+		DesiredConfig: req,
+	}); err != nil {
+		s.auditCurrentUser(r, "container.create", nodeID, req.Name, commandID, false, err.Error())
+		_ = s.nodeManager.CompleteCommand(commandID, false, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	if err := s.nodeManager.SendCommand(nodeID, cmd); err != nil {
 		s.auditCurrentUser(r, "container.create", nodeID, req.Name, commandID, false, err.Error())
 		_ = s.nodeManager.CompleteCommand(commandID, false, err.Error())
+		_ = s.serverManager.UpdateStatus(commandID, "failed")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -850,6 +929,85 @@ func (s *Server) handleStartContainer(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 	}, "container.start", "start_requested")
+}
+
+type createContainerConfig struct {
+	ports         []*proto.PortMapping
+	env           []*proto.EnvVar
+	volumes       []*proto.VolumeMount
+	restartPolicy string
+}
+
+func validateCreateContainerConfig(req createContainerRequest) (createContainerConfig, error) {
+	if len(req.Ports) > 32 {
+		return createContainerConfig{}, fmt.Errorf("containers can expose at most 32 ports")
+	}
+	if len(req.Env) > 64 {
+		return createContainerConfig{}, fmt.Errorf("containers can define at most 64 environment variables")
+	}
+	if len(req.Volumes) > 16 {
+		return createContainerConfig{}, fmt.Errorf("containers can mount at most 16 volumes")
+	}
+	if err := validateRestartPolicy(req.RestartPolicy); err != nil {
+		return createContainerConfig{}, err
+	}
+
+	config := createContainerConfig{
+		ports:         make([]*proto.PortMapping, 0, len(req.Ports)),
+		env:           make([]*proto.EnvVar, 0, len(req.Env)),
+		volumes:       make([]*proto.VolumeMount, 0, len(req.Volumes)),
+		restartPolicy: req.RestartPolicy,
+	}
+
+	for _, port := range req.Ports {
+		protocol := strings.ToLower(strings.TrimSpace(port.Protocol))
+		if protocol == "" {
+			protocol = "tcp"
+		}
+		if err := validatePort(port.HostPort, "host port"); err != nil {
+			return createContainerConfig{}, err
+		}
+		if err := validatePort(port.ContainerPort, "container port"); err != nil {
+			return createContainerConfig{}, err
+		}
+		if err := validateProtocol(protocol); err != nil {
+			return createContainerConfig{}, err
+		}
+		config.ports = append(config.ports, &proto.PortMapping{
+			HostPort:      uint32(port.HostPort),
+			ContainerPort: uint32(port.ContainerPort),
+			Protocol:      protocol,
+		})
+	}
+
+	for _, env := range req.Env {
+		key := strings.TrimSpace(env.Key)
+		if err := validateEnvKey(key); err != nil {
+			return createContainerConfig{}, err
+		}
+		if err := validateEnvValue(env.Value); err != nil {
+			return createContainerConfig{}, err
+		}
+		config.env = append(config.env, &proto.EnvVar{Key: key, Value: env.Value})
+	}
+
+	for _, volume := range req.Volumes {
+		hostPath := strings.TrimSpace(volume.HostPath)
+		containerPath := strings.TrimSpace(volume.ContainerPath)
+		if err := validateVolumeHostPath(hostPath); err != nil {
+			return createContainerConfig{}, err
+		}
+		if err := validateVolumeContainerPath(containerPath); err != nil {
+			return createContainerConfig{}, err
+		}
+		config.volumes = append(config.volumes, &proto.VolumeMount{
+			HostPath:      hostPath,
+			ContainerPath: containerPath,
+			ReadOnly:      volume.ReadOnly,
+		})
+	}
+
+	return config, nil
 }
 
 func (s *Server) handleStopContainer(w http.ResponseWriter, r *http.Request) {

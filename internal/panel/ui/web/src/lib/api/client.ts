@@ -43,6 +43,42 @@ export type Container = {
 	status?: string;
 };
 
+export type Server = {
+	id: string;
+	name: string;
+	node_id: string;
+	container_id?: string;
+	image: string;
+	status: string;
+	desired_config_json: string;
+	created_at: number;
+	updated_at: number;
+};
+
+export type ContainerPortMapping = {
+	host_port: number;
+	container_port: number;
+	protocol: 'tcp' | 'udp';
+};
+
+export type ContainerEnvVar = {
+	key: string;
+	value: string;
+};
+
+export type ContainerVolumeMount = {
+	host_path: string;
+	container_path: string;
+	read_only?: boolean;
+};
+
+export type CreateContainerConfig = {
+	ports?: ContainerPortMapping[];
+	env?: ContainerEnvVar[];
+	volumes?: ContainerVolumeMount[];
+	restart_policy?: string;
+};
+
 export type PanelEventName = 'nodes.changed' | 'command.updated' | 'containers.changed';
 
 export type PanelEventPayload = {
@@ -189,10 +225,10 @@ export const panel = {
 		return response.json();
 	},
 
-	createContainer: async (nodeID: string, name: string, image: string): Promise<CommandResponse> => {
+	createContainer: async (nodeID: string, name: string, image: string, config: CreateContainerConfig = {}): Promise<CommandResponse> => {
 		const response = await apiFetch(`/api/nodes/${nodeID}/containers`, {
 			method: 'POST',
-			body: JSON.stringify({ name, image }),
+			body: JSON.stringify({ name, image, ...config }),
 		});
 		if (!response.ok) {
 			throw new Error(await response.text());
@@ -259,6 +295,22 @@ export const panel = {
 
 	commands: async (limit = 100): Promise<Command[]> => {
 		const response = await apiFetch(`/api/commands?limit=${limit}`);
+		if (!response.ok) {
+			throw new Error(await response.text());
+		}
+		return response.json();
+	},
+
+	servers: async (): Promise<Server[]> => {
+		const response = await apiFetch('/api/servers');
+		if (!response.ok) {
+			throw new Error(await response.text());
+		}
+		return response.json();
+	},
+
+	server: async (serverID: string): Promise<Server> => {
+		const response = await apiFetch(`/api/servers/${serverID}`);
 		if (!response.ok) {
 			throw new Error(await response.text());
 		}

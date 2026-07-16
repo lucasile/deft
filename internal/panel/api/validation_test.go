@@ -33,3 +33,51 @@ func TestValidateImage(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateCreateContainerConfig(t *testing.T) {
+	config, err := validateCreateContainerConfig(createContainerRequest{
+		Ports: []portMappingRequest{
+			{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"},
+		},
+		Env: []envVarRequest{
+			{Key: "EULA", Value: "TRUE"},
+		},
+		Volumes: []volumeMountRequest{
+			{HostPath: "/var/lib/deft/volumes/minecraft-1", ContainerPath: "/data", ReadOnly: true},
+		},
+		RestartPolicy: "unless-stopped",
+	})
+	if err != nil {
+		t.Fatalf("validate config: %v", err)
+	}
+	if len(config.ports) != 1 || config.ports[0].GetProtocol() != "tcp" {
+		t.Fatalf("unexpected ports: %+v", config.ports)
+	}
+	if len(config.env) != 1 || config.env[0].GetKey() != "EULA" {
+		t.Fatalf("unexpected env: %+v", config.env)
+	}
+	if len(config.volumes) != 1 || !config.volumes[0].GetReadOnly() {
+		t.Fatalf("unexpected volumes: %+v", config.volumes)
+	}
+	if config.restartPolicy != "unless-stopped" {
+		t.Fatalf("restart policy = %q", config.restartPolicy)
+	}
+}
+
+func TestValidateCreateContainerConfigRejectsUnsafeVolumeHostPath(t *testing.T) {
+	_, err := validateCreateContainerConfig(createContainerRequest{
+		Volumes: []volumeMountRequest{
+			{HostPath: "/etc", ContainerPath: "/host"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected unsafe host path to be rejected")
+	}
+}
+
+func TestValidateCreateContainerConfigRejectsBadRestartPolicy(t *testing.T) {
+	_, err := validateCreateContainerConfig(createContainerRequest{RestartPolicy: "bad-policy"})
+	if err == nil {
+		t.Fatal("expected bad restart policy to be rejected")
+	}
+}

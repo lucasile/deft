@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -16,6 +17,7 @@ var (
 	nodeNamePattern      = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,64}$`)
 	containerIDPattern   = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$`)
 	commandIDPattern     = regexp.MustCompile(`^[a-f0-9]{32}$`)
+	envKeyPattern        = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
 	joinTokenIDPattern   = regexp.MustCompile(`^[a-f0-9]{32}$`)
 	joinRequestIDPattern = regexp.MustCompile(`^[a-f0-9]{32}$`)
 	imagePattern         = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._/:@-]{0,254}$`)
@@ -93,4 +95,65 @@ func validateImage(value string) error {
 		return fmt.Errorf("image must be 1-255 characters and use a valid Docker image reference character set")
 	}
 	return nil
+}
+
+func validatePort(value int, label string) error {
+	if value < 1 || value > 65535 {
+		return fmt.Errorf("%s must be between 1 and 65535", label)
+	}
+	return nil
+}
+
+func validateProtocol(value string) error {
+	switch value {
+	case "", "tcp", "udp":
+		return nil
+	default:
+		return fmt.Errorf("protocol must be tcp or udp")
+	}
+}
+
+func validateEnvKey(value string) error {
+	if !envKeyPattern.MatchString(value) {
+		return fmt.Errorf("environment variable names must start with a letter or underscore and use letters, numbers, or underscores")
+	}
+	return nil
+}
+
+func validateEnvValue(value string) error {
+	if len(value) > 4096 || strings.ContainsAny(value, "\x00") {
+		return fmt.Errorf("environment variable values must be 4096 characters or less and cannot contain NUL bytes")
+	}
+	return nil
+}
+
+func validateVolumeHostPath(value string) error {
+	cleaned := filepath.Clean(value)
+	if value != cleaned || !strings.HasPrefix(cleaned, "/var/lib/deft/volumes/") {
+		return fmt.Errorf("volume host paths must be absolute paths under /var/lib/deft/volumes")
+	}
+	if strings.ContainsAny(cleaned, "\x00\r\n") {
+		return fmt.Errorf("volume host paths cannot contain control characters")
+	}
+	return nil
+}
+
+func validateVolumeContainerPath(value string) error {
+	cleaned := filepath.Clean(value)
+	if value != cleaned || !strings.HasPrefix(cleaned, "/") || cleaned == "/" {
+		return fmt.Errorf("volume container paths must be absolute non-root paths")
+	}
+	if strings.ContainsAny(cleaned, "\x00\r\n") {
+		return fmt.Errorf("volume container paths cannot contain control characters")
+	}
+	return nil
+}
+
+func validateRestartPolicy(value string) error {
+	switch value {
+	case "", "no", "always", "unless-stopped", "on-failure":
+		return nil
+	default:
+		return fmt.Errorf("restart policy must be no, always, unless-stopped, or on-failure")
+	}
 }
