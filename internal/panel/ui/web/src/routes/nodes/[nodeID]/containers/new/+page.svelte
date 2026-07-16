@@ -11,6 +11,7 @@
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { backOrGoto } from '$lib/navigation';
 	import { createContainerSchema } from '$lib/schemas';
 
 	let nodes = $state<Node[]>([]);
@@ -122,9 +123,9 @@
 	<header class="border-b border-zinc-800 bg-zinc-950/95">
 		<div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
 			<div class="min-w-0">
-				<Button type="button" variant="ghost" class="mb-2 px-0 text-zinc-400 hover:text-white" onclick={() => goto(`/nodes/${nodeID}`)}>
+				<Button type="button" variant="ghost" class="mb-2 px-0 text-zinc-400 hover:text-white" onclick={() => backOrGoto(`/nodes/${nodeID}`)}>
 					<ArrowLeft size={16} />
-					Agent
+					Back
 				</Button>
 				<h1 class="truncate text-xl font-semibold tracking-normal text-white">Create server</h1>
 				<p class="mt-1 truncate text-sm text-zinc-400">{selectedNode?.name || nodeID}</p>
@@ -256,7 +257,7 @@
 						</div>
 
 						<div class="flex justify-end gap-2">
-							<Button type="button" variant="outline" onclick={() => goto(`/nodes/${nodeID}`)}>Cancel</Button>
+							<Button type="button" variant="outline" onclick={() => backOrGoto(`/nodes/${nodeID}`)}>Cancel</Button>
 							<Button type="submit" disabled={createSubmitting}>
 								<Plus size={16} />
 								Create server

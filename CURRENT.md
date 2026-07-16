@@ -42,6 +42,7 @@
 - [x] Added the first server abstraction foundation: `servers` table, server manager, `GET /api/servers`, `GET /api/servers/{serverID}`, create-time server records, and inventory-based linking from server resource IDs to real Docker container IDs.
 - [x] Made servers visible as the dashboard's primary list and added `/servers/{serverID}` for read-only server overview, desired config, node link, and linked container link.
 - [x] Added dashboard-first server creation UX: the dashboard has a visible `Create server` action, `/servers/new` lets users choose an online node when needed, and the node create flow now presents itself as server creation while still using container-backed implementation under the hood.
+- [x] Added history-aware back navigation for nested panel routes so shared entry points can return to the actual previous page while still falling back to the dashboard or parent route on direct loads.
 
 ## Current Task
 **Implement Panel gRPC Server & REST API Core**
@@ -70,6 +71,7 @@ The panel should:
 - User-facing names are display names, not Docker container names. Docker names should be generated and treated as implementation details.
 - Servers are the intended product object. Containers are implementation detail/debug surface. New game, WireGuard, backups, and settings work should attach to servers first.
 - Dashboard entry points should say `server`, not `container`. Container routes may remain as internal/debug implementation paths until the server abstraction fully owns detail and action pages.
+- Avoid duplicate primary CTAs in the same card empty state. If a card header already has the action, the empty state should explain what is missing, not repeat the same button.
 - Do not allow arbitrary host path mounts from the panel. Deft-created volume mounts should stay under `/var/lib/deft/volumes/...` unless a future explicit admin-only escape hatch is designed and audited.
 - One installed agent per machine is the intended model. Dev/test multi-agent runs must use unique `node_id` values.
 - Production gRPC must use mTLS. Insecure gRPC is only for local development with `DEFT_DEV=true`.

@@ -6,6 +6,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
+	import { backOrGoto } from '$lib/navigation';
 
 	let nodes = $state<Node[]>([]);
 	let loading = $state(true);
@@ -54,9 +55,9 @@
 	<header class="border-b border-zinc-800 bg-zinc-950/95">
 		<div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
 			<div class="min-w-0">
-				<Button type="button" variant="ghost" class="mb-2 px-0 text-zinc-400 hover:text-white" onclick={() => goto('/')}>
+				<Button type="button" variant="ghost" class="mb-2 px-0 text-zinc-400 hover:text-white" onclick={() => backOrGoto('/')}>
 					<ArrowLeft size={16} />
-					Servers
+					Back
 				</Button>
 				<h1 class="truncate text-xl font-semibold tracking-normal text-white">Create server</h1>
 				<p class="mt-1 truncate text-sm text-zinc-400">Choose where this server will run.</p>

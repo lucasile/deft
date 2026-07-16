@@ -268,10 +268,6 @@
 			{:else if sortedServers.length === 0}
 				<CardContent class="space-y-3 py-8">
 					<p class="text-sm text-zinc-400">No servers have been created yet.</p>
-					<Button type="button" disabled={onlineNodes.length === 0} onclick={createServer}>
-						<Plus size={16} />
-						Create server
-					</Button>
 					{#if onlineNodes.length === 0}
 						<p class="text-xs text-zinc-500">Connect an agent before creating a server.</p>
 					{/if}
