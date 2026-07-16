@@ -40,6 +40,7 @@
 - [x] Added basic container configuration at create time: port mappings, environment variables, volume mounts, and restart policy. Volume host paths are intentionally restricted to `/var/lib/deft/volumes/...`.
 - [x] Moved the expanded container create form to `/nodes/{nodeID}/containers/new` so the node page stays focused on agent status and the container list.
 - [x] Added the first server abstraction foundation: `servers` table, server manager, `GET /api/servers`, `GET /api/servers/{serverID}`, create-time server records, and inventory-based linking from server resource IDs to real Docker container IDs.
+- [x] Made servers visible as the dashboard's primary list and added `/servers/{serverID}` for read-only server overview, desired config, node link, and linked container link.
 
 ## Current Task
 **Implement Panel gRPC Server & REST API Core**

@@ -2,14 +2,16 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { Check, Clock3, Copy, KeyRound, LogOut, RefreshCw } from '@lucide/svelte';
-	import { auth, panel, type JoinTokenInfo, type Node } from '$lib/api/client';
+	import { auth, panel, type JoinTokenInfo, type Node, type PanelEventPayload, type Server } from '$lib/api/client';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 
 	let nodes = $state<Node[]>([]);
-	let loading = $state(true);
+	let servers = $state<Server[]>([]);
+	let nodesLoading = $state(true);
+	let serversLoading = $state(true);
 	let joinTokenLoading = $state(false);
 	let joinToken = $state('');
 	let joinTokenExpiresAt = $state(0);
@@ -19,6 +21,7 @@
 	let tokenToRevoke = $state<string | null>(null);
 
 	const connectedNodes = $derived(nodes.filter((node) => node.connected));
+	const sortedServers = $derived([...servers].sort((a, b) => b.created_at - a.created_at || a.name.localeCompare(b.name)));
 	const onlineNodes = $derived(
 		nodes
 			.filter((node) => node.connected)
@@ -51,18 +54,26 @@
 
 	onMount(() => {
 		void loadNodes();
+		void loadServers();
 		void loadJoinTokens();
 
 		const events = panel.events();
 		events.addEventListener('nodes.changed', () => {
 			void loadNodes({ quiet: true });
 		});
+		events.addEventListener('containers.changed', () => {
+			void loadServers({ quiet: true });
+		});
+		events.addEventListener('command.updated', (event) => {
+			const payload = parseEventPayload(event);
+			if (payload.command_id) void loadServers({ quiet: true });
+		});
 		return () => events.close();
 	});
 
 	const loadNodes = async (options: { quiet?: boolean } = {}) => {
 		if (!options.quiet) {
-			loading = true;
+			nodesLoading = true;
 			error = null;
 		}
 		try {
@@ -73,7 +84,24 @@
 				goto('/login');
 			}
 		} finally {
-			loading = false;
+			nodesLoading = false;
+		}
+	};
+
+	const loadServers = async (options: { quiet?: boolean } = {}) => {
+		if (!options.quiet) {
+			serversLoading = true;
+			error = null;
+		}
+		try {
+			servers = await panel.servers();
+		} catch (err) {
+			error = cleanError(err);
+			if (error.includes('missing session') || error.includes('invalid session')) {
+				goto('/login');
+			}
+		} finally {
+			serversLoading = false;
 		}
 	};
 
@@ -138,6 +166,10 @@
 		goto(`/nodes/${nodeID}`);
 	};
 
+	const openServer = (serverID: string) => {
+		goto(`/servers/${serverID}`);
+	};
+
 	const isDuplicateNodeName = (node: Node) => {
 		return (duplicateNodeNames[node.name || node.id] ?? 0) > 1;
 	};
@@ -159,6 +191,25 @@
 		return err instanceof Error ? err.message.trim() : 'Request failed';
 	};
 
+	const parseEventPayload = (event: Event): PanelEventPayload => {
+		if (!(event instanceof MessageEvent) || typeof event.data !== 'string') return {};
+
+		try {
+			return JSON.parse(event.data) as PanelEventPayload;
+		} catch {
+			return {};
+		}
+	};
+
+	type BadgeVariant = 'default' | 'secondary' | 'success' | 'warning' | 'destructive';
+
+	const serverStatusVariant = (status = ''): BadgeVariant => {
+		if (status === 'running') return 'success';
+		if (status.endsWith('_requested')) return 'warning';
+		if (status === 'failed' || status === 'missing') return 'destructive';
+		return 'default';
+	};
+
 </script>
 
 <svelte:head>
@@ -170,7 +221,7 @@
 		<div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
 			<div>
 				<h1 class="text-xl font-semibold tracking-normal text-white">Deft</h1>
-				<p class="mt-1 text-sm text-zinc-400">Node and container control</p>
+				<p class="mt-1 text-sm text-zinc-400">Server and node control</p>
 			</div>
 			<div class="flex gap-2">
 				<Button type="button" variant="outline" onclick={() => goto('/commands')}>
@@ -189,6 +240,52 @@
 		<Card>
 			<CardHeader class="flex flex-row items-center justify-between">
 				<div>
+					<CardTitle>Servers</CardTitle>
+					<p class="text-sm text-zinc-400">{servers.length} known</p>
+				</div>
+				<Button type="button" variant="outline" size="sm" disabled={serversLoading} onclick={() => void loadServers()}>
+					<RefreshCw size={15} />
+					Refresh
+				</Button>
+			</CardHeader>
+
+			{#if serversLoading && servers.length === 0}
+				<CardContent class="py-8 text-sm text-zinc-400">Loading servers...</CardContent>
+			{:else if sortedServers.length === 0}
+				<CardContent class="py-8 text-sm text-zinc-400">No servers have been created yet.</CardContent>
+			{:else}
+				<div class="divide-y divide-zinc-800">
+					{#each sortedServers as server (server.id)}
+						<button
+							type="button"
+							class="grid w-full gap-3 px-4 py-4 text-left hover:bg-zinc-800/70 sm:grid-cols-[1fr_auto]"
+							onclick={() => openServer(server.id)}
+						>
+							<div class="min-w-0">
+								<div class="flex items-center gap-2">
+									<span class="truncate font-medium text-white">{server.name}</span>
+									<Badge variant={serverStatusVariant(server.status)}>
+										{server.status || 'unknown'}
+									</Badge>
+								</div>
+								<p class="mt-1 truncate text-sm text-zinc-400">{server.image}</p>
+								<p class="mt-1 truncate font-mono text-xs text-zinc-500">{server.id}</p>
+							</div>
+							<div class="min-w-0 text-sm text-zinc-400">
+								<p class="truncate">Node {server.node_id}</p>
+								{#if server.container_id}
+									<p class="mt-1 truncate font-mono text-xs text-zinc-500">{server.container_id}</p>
+								{/if}
+							</div>
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</Card>
+
+		<Card>
+			<CardHeader class="flex flex-row items-center justify-between">
+				<div>
 					<CardTitle>Nodes</CardTitle>
 					<p class="text-sm text-zinc-400">{connectedNodes.length} connected / {nodes.length} known</p>
 				</div>
@@ -203,7 +300,7 @@
 						<KeyRound size={15} />
 						{activeJoinTokenCount >= 5 ? 'Token limit reached' : 'Get join token'}
 					</Button>
-					<Button type="button" variant="outline" size="sm" disabled={loading} onclick={() => void loadNodes()}>
+					<Button type="button" variant="outline" size="sm" disabled={nodesLoading} onclick={() => void loadNodes()}>
 						<RefreshCw size={15} />
 						Refresh
 					</Button>
@@ -279,7 +376,7 @@
 				</div>
 			{/if}
 
-			{#if nodes.length === 0 && loading}
+			{#if nodes.length === 0 && nodesLoading}
 				<CardContent class="py-8 text-sm text-zinc-400">Loading nodes...</CardContent>
 			{:else if nodes.length === 0}
 				<CardContent class="py-8 text-sm text-zinc-400">No nodes have connected yet.</CardContent>
