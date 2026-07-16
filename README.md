@@ -57,20 +57,6 @@ The panel and agent are both single static binaries with no runtime dependencies
 
 ---
 
-## Contributing
-
-Contributions are very welcome. Deft is in early development — the best way to help right now is building out the agent core.
-
-```bash
-git clone https://github.com/lucasile/deft
-cd deft
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, branch conventions, and the current roadmap.
-
-Good first issues are tagged [`good first issue`](https://github.com/lucasile/deft/issues?q=label%3A%22good+first+issue%22).
-
----
 
 ## License
 
