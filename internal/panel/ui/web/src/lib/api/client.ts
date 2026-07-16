@@ -15,6 +15,7 @@ export type Node = {
 	id: string;
 	name?: string;
 	last_seen: number;
+	created_at: number;
 	connected: boolean;
 };
 
@@ -48,6 +49,19 @@ export type PanelEventPayload = {
 	node_id?: string;
 	command_id?: string;
 	container_id?: string;
+};
+
+export type LogChunkPayload = {
+	node_id: string;
+	stream_id: string;
+	container_id: string;
+	data?: string;
+	eof?: boolean;
+	error?: string;
+};
+
+export type LogStreamResponse = {
+	stream_id: string;
 };
 
 export type JoinRequestReview = {
@@ -156,6 +170,25 @@ export const panel = {
 		return response.json();
 	},
 
+	removeNode: async (nodeID: string): Promise<void> => {
+		const response = await apiFetch(`/api/nodes/${nodeID}`, {
+			method: 'DELETE',
+		});
+		if (!response.ok) {
+			throw new Error(await response.text());
+		}
+	},
+
+	stopNode: async (nodeID: string): Promise<CommandResponse> => {
+		const response = await apiFetch(`/api/nodes/${nodeID}/stop`, {
+			method: 'POST',
+		});
+		if (!response.ok) {
+			throw new Error(await response.text());
+		}
+		return response.json();
+	},
+
 	createContainer: async (nodeID: string, name: string, image: string): Promise<CommandResponse> => {
 		const response = await apiFetch(`/api/nodes/${nodeID}/containers`, {
 			method: 'POST',
@@ -189,8 +222,43 @@ export const panel = {
 		return response.json();
 	},
 
+	containerLogs: async (nodeID: string, containerID: string): Promise<CommandResponse> => {
+		const response = await apiFetch(`/api/nodes/${nodeID}/containers/${containerID}/logs`, {
+			method: 'POST',
+		});
+		if (!response.ok) {
+			throw new Error(await response.text());
+		}
+		return response.json();
+	},
+
+	createContainerLogStream: async (nodeID: string, containerID: string): Promise<LogStreamResponse> => {
+		const response = await apiFetch(`/api/nodes/${nodeID}/containers/${containerID}/logs/stream`, {
+			method: 'POST',
+		});
+		if (!response.ok) {
+			throw new Error(await response.text());
+		}
+		return response.json();
+	},
+
+	containerLogStream: (nodeID: string, containerID: string, streamID: string): EventSource => {
+		return new EventSource(
+			`/api/nodes/${nodeID}/containers/${containerID}/logs/stream?stream_id=${encodeURIComponent(streamID)}`,
+			{ withCredentials: true },
+		);
+	},
+
 	command: async (commandID: string): Promise<Command> => {
 		const response = await apiFetch(`/api/commands/${commandID}`);
+		if (!response.ok) {
+			throw new Error(await response.text());
+		}
+		return response.json();
+	},
+
+	commands: async (limit = 100): Promise<Command[]> => {
+		const response = await apiFetch(`/api/commands?limit=${limit}`);
 		if (!response.ok) {
 			throw new Error(await response.text());
 		}

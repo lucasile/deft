@@ -34,6 +34,9 @@
 - [x] Added installer-driven agent join: installer can use either browser approval link flow or headless join token flow, generate local agent key/CSR, write certs/config, and start systemd service.
 - [x] Added join token manager foundation: list recent tokens, show active/used/expired/revoked state, and revoke unused tokens.
 - [x] Added local multi-agent dev helper: `make dev-agent NAME=<name> [TOKEN=<token>]` creates a clean isolated `.deft/dev-agents/<name>` config/certs directory and runs `deftd` in the foreground. If `TOKEN` is omitted, it creates a browser approval link against `PANEL_URL` or `http://localhost:3000`.
+- [x] Scoped container management to Deft-owned containers: created containers get `deft.managed=true` labels, agents sync only labeled Docker containers, and panel inventory reconciles those rows.
+- [x] Decoupled user-facing container/server names from Docker names. Panel generates Deft-owned Docker names (`deft-...`) and stores the friendly name in labels/inventory.
+- [x] Added live container logs on the container detail page. The browser requests a short-lived stream ID with a CSRF-protected POST, then opens an authenticated SSE stream; the panel sends typed gRPC follow/cancel commands to the agent and cancels the Docker log follow when the browser disconnects.
 
 ## Current Task
 **Implement Panel gRPC Server & REST API Core**
@@ -56,7 +59,10 @@ The panel should:
 - Frontend forms may use Superforms for UX/client validation, but Go API validation remains the security boundary.
 - Browser/UI -> Go REST API -> Go node manager -> gRPC stream -> agent -> Docker.
 - Browser live updates should use authenticated SSE invalidation events before adding polling. Use WebSockets only when the browser needs bidirectional streams such as console input.
+- Live log streams are read-only SSE. Starting a stream must remain CSRF-protected; do not let unauthenticated or plain cross-site GET requests trigger agent actions.
 - Keep panel-to-agent operations typed and allowlisted through protobuf. Do not add arbitrary host command execution.
+- Deft should manage labeled containers by default. Do not treat every Docker container on the host as managed; unmanaged discovery should be explicit and read-only at first.
+- User-facing names are display names, not Docker container names. Docker names should be generated and treated as implementation details.
 - One installed agent per machine is the intended model. Dev/test multi-agent runs must use unique `node_id` values.
 - Production gRPC must use mTLS. Insecure gRPC is only for local development with `DEFT_DEV=true`.
 - Deft has no global panel authority. Each self-hosted panel is its own trust root and issues its own agent join tokens/certificates.

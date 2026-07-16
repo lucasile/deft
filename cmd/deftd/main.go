@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"os"
 	"time"
@@ -49,6 +50,9 @@ func main() {
 	}
 
 	handler := tunnel.NewHandler(dockerClient, conn, cfg.NodeID)
+	if err := handler.SendContainerInventory(ctx); err != nil {
+		log.Error().Err(err).Msg("failed to send initial container inventory")
+	}
 	reconnectBackoff := 1 * time.Second
 	maxReconnectBackoff := 60 * time.Second
 
@@ -64,10 +68,19 @@ func main() {
 			if err := conn.Connect(ctx, cfg.NodeID); err != nil {
 				log.Fatal().Err(err).Msg("failed to reconnect")
 			}
+			if err := handler.SendContainerInventory(ctx); err != nil {
+				log.Error().Err(err).Msg("failed to send container inventory after reconnect")
+			}
 			continue
 		}
 
 		reconnectBackoff = 1 * time.Second
-		go handler.HandleCommand(ctx, cmd)
+		if err := handler.HandleCommand(ctx, cmd); err != nil {
+			if errors.Is(err, tunnel.ErrShutdownRequested) {
+				log.Info().Msg("remote shutdown requested")
+				return
+			}
+			log.Error().Err(err).Str("command_id", cmd.CommandId).Msg("failed to handle command")
+		}
 	}
 }

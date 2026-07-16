@@ -38,3 +38,17 @@ func TestContainerLifecycle(t *testing.T) {
 		t.Errorf("Failed to remove container: %v", err)
 	}
 }
+
+func TestPanelStatus(t *testing.T) {
+	tests := map[string]string{
+		"running": "running",
+		"exited":  "stopped",
+		"created": "created",
+	}
+
+	for input, want := range tests {
+		if got := panelStatus(input); got != want {
+			t.Fatalf("panelStatus(%q) = %q, want %q", input, got, want)
+		}
+	}
+}

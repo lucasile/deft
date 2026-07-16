@@ -1,6 +1,6 @@
 # Makefile for Deft - AI Server Manager
 
-.PHONY: all agent-cli daemon installer panel docker-panel dev-agent clean test tidy check-root
+.PHONY: all agent-cli daemon installer panel docker-panel dev-agent clean-dev-containers clean test tidy check-root
 
 # Go settings
 GO := go
@@ -58,6 +58,9 @@ dev-agent:
 		exit 1; \
 	fi
 	PANEL_URL="$(PANEL_URL)" ./scripts/run-dev-agent.sh "$(NAME)" "$(TOKEN)"
+
+clean-dev-containers:
+	NODE_ID="$(NODE_ID)" YES="$(YES)" ./scripts/clean-dev-containers.sh
 
 clean:
 	@echo "Cleaning up..."

@@ -23,6 +23,7 @@ const (
 	EventNodesChanged      = "nodes.changed"
 	EventCommandUpdated    = "command.updated"
 	EventContainersChanged = "containers.changed"
+	EventLogChunk          = "logs.chunk"
 )
 
 type NodeConnection struct {
@@ -34,6 +35,7 @@ type Node struct {
 	ID        string `json:"id"`
 	Name      string `json:"name,omitempty"`
 	LastSeen  int64  `json:"last_seen"`
+	CreatedAt int64  `json:"created_at"`
 	Connected bool   `json:"connected"`
 }
 
@@ -55,6 +57,15 @@ type Container struct {
 	Name   string `json:"name,omitempty"`
 	Image  string `json:"image,omitempty"`
 	Status string `json:"status,omitempty"`
+}
+
+type LogChunk struct {
+	NodeID      string `json:"node_id"`
+	StreamID    string `json:"stream_id"`
+	ContainerID string `json:"container_id"`
+	Data        []byte `json:"data,omitempty"`
+	EOF         bool   `json:"eof,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 type Manager struct {
@@ -147,6 +158,23 @@ func (m *Manager) Connect(stream proto.AgentService_ConnectServer) error {
 			m.publish(EventCommandUpdated, map[string]string{"command_id": res.CommandId})
 		}
 
+		if inventory := msg.GetInventory(); inventory != nil {
+			if err := m.SyncContainers(nodeID, inventory.Containers); err != nil {
+				log.Error().Err(err).Str("node_id", nodeID).Msg("failed to sync container inventory")
+			}
+		}
+
+		if chunk := msg.GetLogChunk(); chunk != nil {
+			m.publish(EventLogChunk, LogChunk{
+				NodeID:      nodeID,
+				StreamID:    chunk.GetStreamId(),
+				ContainerID: chunk.GetContainerId(),
+				Data:        chunk.GetData(),
+				EOF:         chunk.GetEof(),
+				Error:       chunk.GetError(),
+			})
+		}
+
 		if _, err := m.db.Exec("UPDATE nodes SET last_seen = ? WHERE id = ?", time.Now().Unix(), nodeID); err != nil {
 			log.Error().Err(err).Str("node_id", nodeID).Msg("failed to update node heartbeat")
 		}
@@ -227,7 +255,7 @@ func nodeIDFromCertificate(cert *x509.Certificate) string {
 }
 
 func (m *Manager) ListNodes() ([]Node, error) {
-	rows, err := m.db.Query("SELECT id, name, last_seen FROM nodes ORDER BY id")
+	rows, err := m.db.Query("SELECT id, name, last_seen, COALESCE(created_at, last_seen, 0) FROM nodes ORDER BY id")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list nodes: %w", err)
 	}
@@ -244,7 +272,7 @@ func (m *Manager) ListNodes() ([]Node, error) {
 	for rows.Next() {
 		var node Node
 		var name sql.NullString
-		if err := rows.Scan(&node.ID, &name, &node.LastSeen); err != nil {
+		if err := rows.Scan(&node.ID, &name, &node.LastSeen, &node.CreatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan node: %w", err)
 		}
 		if name.Valid {
@@ -258,6 +286,52 @@ func (m *Manager) ListNodes() ([]Node, error) {
 	}
 
 	return result, nil
+}
+
+func (m *Manager) RemoveNode(nodeID string) error {
+	m.mu.RLock()
+	_, connected := m.nodes[nodeID]
+	m.mu.RUnlock()
+	if connected {
+		return fmt.Errorf("node is connected")
+	}
+
+	tx, err := m.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start node removal: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("UPDATE join_tokens SET used_by_node_id = NULL WHERE used_by_node_id = ?", nodeID); err != nil {
+		return fmt.Errorf("failed to detach join tokens: %w", err)
+	}
+	if _, err := tx.Exec("UPDATE join_requests SET approved_node_id = NULL WHERE approved_node_id = ?", nodeID); err != nil {
+		return fmt.Errorf("failed to detach join requests: %w", err)
+	}
+	if _, err := tx.Exec("DELETE FROM containers WHERE node_id = ?", nodeID); err != nil {
+		return fmt.Errorf("failed to delete node containers: %w", err)
+	}
+	if _, err := tx.Exec("DELETE FROM commands WHERE node_id = ?", nodeID); err != nil {
+		return fmt.Errorf("failed to delete node commands: %w", err)
+	}
+	result, err := tx.Exec("DELETE FROM nodes WHERE id = ?", nodeID)
+	if err != nil {
+		return fmt.Errorf("failed to delete node: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to confirm node removal: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("node not found")
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit node removal: %w", err)
+	}
+
+	m.publish(EventNodesChanged, map[string]string{"node_id": nodeID})
+	m.publish(EventContainersChanged, map[string]string{"node_id": nodeID})
+	return nil
 }
 
 func (m *Manager) UpsertContainer(nodeID, containerID, name, image, status string) error {
@@ -290,18 +364,23 @@ func (m *Manager) publish(name string, data any) {
 }
 
 func (m *Manager) UpdateContainerStatus(nodeID, containerID, status string) error {
-	_, err := m.db.Exec(
-		`INSERT INTO containers (id, node_id, name, status)
-		 VALUES (?, ?, ?, ?)
-		 ON CONFLICT(id) DO UPDATE SET
-		   status = excluded.status`,
-		containerID,
+	result, err := m.db.Exec(
+		`UPDATE containers
+		 SET status = ?
+		 WHERE node_id = ? AND id = ?`,
+		status,
 		nodeID,
 		containerID,
-		status,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update container status: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to confirm container status update: %w", err)
+	}
+	if rowsAffected == 0 {
+		return nil
 	}
 
 	m.publish(EventContainersChanged, map[string]string{"node_id": nodeID, "container_id": containerID})
@@ -346,6 +425,81 @@ func (m *Manager) ListContainers(nodeID string) ([]Container, error) {
 	}
 
 	return containers, nil
+}
+
+func (m *Manager) SyncContainers(nodeID string, inventory []*proto.ContainerSummary) error {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start container sync: %w", err)
+	}
+	defer tx.Rollback()
+
+	ids := make([]string, 0, len(inventory))
+	for _, item := range inventory {
+		if item.GetId() == "" {
+			continue
+		}
+		ids = append(ids, item.GetId())
+
+		if item.GetName() != "" {
+			if _, err := tx.Exec(
+				`DELETE FROM containers
+				 WHERE node_id = ? AND id = ?`,
+				nodeID,
+				item.GetName(),
+			); err != nil {
+				return fmt.Errorf("failed to remove stale container placeholder: %w", err)
+			}
+		}
+
+		if _, err := tx.Exec(
+			`INSERT INTO containers (id, node_id, name, image, status)
+			 VALUES (?, ?, ?, ?, ?)
+			 ON CONFLICT(id) DO UPDATE SET
+			   node_id = excluded.node_id,
+			   name = excluded.name,
+			   image = excluded.image,
+			   status = excluded.status`,
+			item.GetId(),
+			nodeID,
+			item.GetName(),
+			item.GetImage(),
+			item.GetStatus(),
+		); err != nil {
+			return fmt.Errorf("failed to sync container: %w", err)
+		}
+	}
+
+	if len(ids) == 0 {
+		if _, err := tx.Exec(
+			`DELETE FROM containers
+			 WHERE node_id = ?`,
+			nodeID,
+		); err != nil {
+			return fmt.Errorf("failed to delete missing containers: %w", err)
+		}
+	} else {
+		placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+		args := make([]any, 0, len(ids)+1)
+		args = append(args, nodeID)
+		for _, id := range ids {
+			args = append(args, id)
+		}
+		if _, err := tx.Exec(
+			`DELETE FROM containers
+			 WHERE node_id = ? AND id NOT IN (`+placeholders+`)`,
+			args...,
+		); err != nil {
+			return fmt.Errorf("failed to delete missing containers: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit container sync: %w", err)
+	}
+
+	m.publish(EventContainersChanged, map[string]string{"node_id": nodeID})
+	return nil
 }
 
 func (m *Manager) CreateCommand(commandID, nodeID, action, targetID string) error {
@@ -401,13 +555,32 @@ func (m *Manager) CompleteCommand(commandID string, success bool, message string
 	}
 
 	if success && targetID.Valid {
-		if containerStatus := finalContainerStatus(action); containerStatus != "" {
+		if action == "container.remove" {
+			if err := m.DeleteContainer(nodeID, targetID.String); err != nil {
+				return err
+			}
+		} else if containerStatus := finalContainerStatus(action); containerStatus != "" {
 			if err := m.UpdateContainerStatus(nodeID, targetID.String, containerStatus); err != nil {
 				return err
 			}
 		}
 	}
 
+	return nil
+}
+
+func (m *Manager) DeleteContainer(nodeID, containerID string) error {
+	_, err := m.db.Exec(
+		`DELETE FROM containers
+		 WHERE node_id = ? AND id = ?`,
+		nodeID,
+		containerID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete container: %w", err)
+	}
+
+	m.publish(EventContainersChanged, map[string]string{"node_id": nodeID, "container_id": containerID})
 	return nil
 }
 
@@ -459,6 +632,81 @@ func (m *Manager) GetCommand(commandID string) (*Command, error) {
 	return &command, nil
 }
 
+func (m *Manager) ListCommands(limit int) ([]Command, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+
+	rows, err := m.db.Query(
+		`SELECT id, node_id, action, target_id, status, success, message, created_at, completed_at
+		 FROM commands
+		 ORDER BY created_at DESC
+		 LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list commands: %w", err)
+	}
+	defer rows.Close()
+
+	commands := []Command{}
+	for rows.Next() {
+		command, err := scanCommand(rows)
+		if err != nil {
+			return nil, err
+		}
+		commands = append(commands, command)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read commands: %w", err)
+	}
+
+	return commands, nil
+}
+
+type commandScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanCommand(scanner commandScanner) (Command, error) {
+	var command Command
+	var targetID sql.NullString
+	var success sql.NullBool
+	var message sql.NullString
+	var completedAt sql.NullInt64
+
+	if err := scanner.Scan(
+		&command.ID,
+		&command.NodeID,
+		&command.Action,
+		&targetID,
+		&command.Status,
+		&success,
+		&message,
+		&command.CreatedAt,
+		&completedAt,
+	); err != nil {
+		return Command{}, fmt.Errorf("failed to scan command: %w", err)
+	}
+
+	if targetID.Valid {
+		command.TargetID = targetID.String
+	}
+	if success.Valid {
+		value := success.Bool
+		command.Success = &value
+	}
+	if message.Valid {
+		command.Message = message.String
+	}
+	if completedAt.Valid {
+		value := completedAt.Int64
+		command.CompletedAt = &value
+	}
+
+	return command, nil
+}
+
 func boolToInt(value bool) int {
 	if value {
 		return 1
@@ -474,8 +722,6 @@ func finalContainerStatus(action string) string {
 		return "running"
 	case "container.stop":
 		return "stopped"
-	case "container.remove":
-		return "removed"
 	default:
 		return ""
 	}

@@ -9,10 +9,11 @@ import (
 
 func TestHandlerServesExtensionlessStaticRoutes(t *testing.T) {
 	publicFS := fstest.MapFS{
-		"index.html":    &fstest.MapFile{Data: []byte("index")},
-		"login.html":    &fstest.MapFile{Data: []byte("login")},
-		"register.html": &fstest.MapFile{Data: []byte("register")},
-		"app.js":        &fstest.MapFile{Data: []byte("js")},
+		"index.html":                      &fstest.MapFile{Data: []byte("index")},
+		"login.html":                      &fstest.MapFile{Data: []byte("login")},
+		"register.html":                   &fstest.MapFile{Data: []byte("register")},
+		"app.js":                          &fstest.MapFile{Data: []byte("js")},
+		"_app/immutable/chunks/_chunk.js": &fstest.MapFile{Data: []byte("chunk")},
 	}
 	handler := Handler(publicFS)
 
@@ -22,9 +23,13 @@ func TestHandlerServesExtensionlessStaticRoutes(t *testing.T) {
 		code int
 	}{
 		{path: "/", want: "index", code: http.StatusOK},
+		{path: "/commands", want: "index", code: http.StatusOK},
 		{path: "/login", want: "login", code: http.StatusOK},
 		{path: "/register", want: "register", code: http.StatusOK},
+		{path: "/nodes/node_123", want: "index", code: http.StatusOK},
+		{path: "/nodes/node_123/containers/container_456", want: "index", code: http.StatusOK},
 		{path: "/nodes/join/request-id", want: "index", code: http.StatusOK},
+		{path: "/_app/immutable/chunks/_chunk.js", want: "chunk", code: http.StatusOK},
 		{path: "/missing.js", code: http.StatusNotFound},
 	}
 

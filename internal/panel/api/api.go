@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lucasile/deft/internal/panel/audit"
@@ -28,6 +30,14 @@ type Server struct {
 	secureCookies bool
 	authLimiter   *rateLimiter
 	actionLimiter *rateLimiter
+	liveLogMu     sync.Mutex
+	liveLogTokens map[string]liveLogToken
+}
+
+type liveLogToken struct {
+	NodeID      string
+	ContainerID string
+	ExpiresAt   time.Time
 }
 
 func NewServer(
@@ -47,6 +57,7 @@ func NewServer(
 		secureCookies: secureCookies,
 		authLimiter:   newRateLimiter(5, time.Minute),
 		actionLimiter: newRateLimiter(60, time.Minute),
+		liveLogTokens: make(map[string]liveLogToken),
 	}
 }
 
@@ -64,13 +75,19 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/agent/join-requests/{requestID}/review", s.requireAuth(s.handleReviewJoinRequest))
 	mux.HandleFunc("POST /api/agent/join-requests/{requestID}/approve", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleApproveJoinRequest))))
 	mux.HandleFunc("GET /api/nodes", s.requireAuth(s.handleListNodes))
+	mux.HandleFunc("DELETE /api/nodes/{nodeID}", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleRemoveNode))))
+	mux.HandleFunc("POST /api/nodes/{nodeID}/stop", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStopNode))))
 	mux.HandleFunc("GET /api/events", s.requireAuth(s.handleEvents))
+	mux.HandleFunc("GET /api/commands", s.requireAuth(s.handleListCommands))
 	mux.HandleFunc("GET /api/commands/{commandID}", s.requireAuth(s.handleGetCommand))
 	mux.HandleFunc("GET /api/nodes/{nodeID}/containers", s.requireAuth(s.handleListContainers))
 	mux.HandleFunc("POST /api/nodes/{nodeID}/containers", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleCreateContainer))))
 	mux.HandleFunc("POST /api/nodes/{nodeID}/containers/{containerID}/start", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStartContainer))))
 	mux.HandleFunc("POST /api/nodes/{nodeID}/containers/{containerID}/stop", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStopContainer))))
 	mux.HandleFunc("POST /api/nodes/{nodeID}/containers/{containerID}/remove", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleRemoveContainer))))
+	mux.HandleFunc("POST /api/nodes/{nodeID}/containers/{containerID}/logs", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleContainerLogs))))
+	mux.HandleFunc("POST /api/nodes/{nodeID}/containers/{containerID}/logs/stream", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleCreateContainerLogStream))))
+	mux.HandleFunc("GET /api/nodes/{nodeID}/containers/{containerID}/logs/stream", s.rateLimitAction(s.requireAuth(s.handleContainerLogStream)))
 }
 
 type authRequest struct {
@@ -94,6 +111,10 @@ type createContainerRequest struct {
 
 type commandResponse struct {
 	CommandID string `json:"command_id"`
+}
+
+type logStreamResponse struct {
+	StreamID string `json:"stream_id"`
 }
 
 type createJoinTokenRequest struct {
@@ -445,6 +466,66 @@ func (s *Server) handleListNodes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, nodeList)
 }
 
+func (s *Server) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
+	nodeID := strings.TrimSpace(r.PathValue("nodeID"))
+	if err := validateNodeID(nodeID); err != nil {
+		s.auditCurrentUser(r, "node.remove", nodeID, "", "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := s.nodeManager.RemoveNode(nodeID); err != nil {
+		s.auditCurrentUser(r, "node.remove", nodeID, "", "", false, err.Error())
+		status := http.StatusForbidden
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+
+	s.auditCurrentUser(r, "node.remove", nodeID, "", "", true, "")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleStopNode(w http.ResponseWriter, r *http.Request) {
+	nodeID := strings.TrimSpace(r.PathValue("nodeID"))
+	if err := validateNodeID(nodeID); err != nil {
+		s.auditCurrentUser(r, "agent.stop", nodeID, "", "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	commandID, err := newCommandID()
+	if err != nil {
+		s.auditCurrentUser(r, "agent.stop", nodeID, "", "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.nodeManager.CreateCommand(commandID, nodeID, "agent.stop", nodeID); err != nil {
+		s.auditCurrentUser(r, "agent.stop", nodeID, nodeID, commandID, false, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	cmd := &proto.PanelCommand{
+		CommandId: commandID,
+		Action: &proto.PanelCommand_Shutdown{
+			Shutdown: &proto.ShutdownAgent{},
+		},
+	}
+	if err := s.nodeManager.SendCommand(nodeID, cmd); err != nil {
+		s.auditCurrentUser(r, "agent.stop", nodeID, nodeID, commandID, false, err.Error())
+		_ = s.nodeManager.CompleteCommand(commandID, false, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.auditCurrentUser(r, "agent.stop", nodeID, nodeID, commandID, true, "")
+	writeJSON(w, http.StatusAccepted, commandResponse{CommandID: commandID})
+}
+
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -481,6 +562,26 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleListCommands(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
+		value, err := strconv.Atoi(rawLimit)
+		if err != nil || value <= 0 || value > 200 {
+			http.Error(w, "limit must be between 1 and 200", http.StatusBadRequest)
+			return
+		}
+		limit = value
+	}
+
+	commands, err := s.nodeManager.ListCommands(limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, commands)
+}
+
 func (s *Server) handleGetCommand(w http.ResponseWriter, r *http.Request) {
 	commandID := strings.TrimSpace(r.PathValue("commandID"))
 	if err := validateCommandID(commandID); err != nil {
@@ -495,6 +596,168 @@ func (s *Server) handleGetCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, command)
+}
+
+func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
+	s.handleContainerCommand(w, r, func(commandID, containerID string) *proto.PanelCommand {
+		return &proto.PanelCommand{
+			CommandId: commandID,
+			Action: &proto.PanelCommand_Logs{
+				Logs: &proto.GetContainerLogs{
+					Id:        containerID,
+					TailLines: 200,
+				},
+			},
+		}
+	}, "container.logs", "")
+}
+
+func (s *Server) handleCreateContainerLogStream(w http.ResponseWriter, r *http.Request) {
+	nodeID := strings.TrimSpace(r.PathValue("nodeID"))
+	containerID := strings.TrimSpace(r.PathValue("containerID"))
+	if err := validateNodeID(nodeID); err != nil {
+		s.auditCurrentUser(r, "container.logs.stream.create", nodeID, containerID, "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := validateContainerID(containerID); err != nil {
+		s.auditCurrentUser(r, "container.logs.stream.create", nodeID, containerID, "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	streamID, err := newCommandID()
+	if err != nil {
+		s.auditCurrentUser(r, "container.logs.stream.create", nodeID, containerID, "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	now := time.Now()
+	s.liveLogMu.Lock()
+	s.pruneExpiredLiveLogTokens(now)
+	s.liveLogTokens[streamID] = liveLogToken{
+		NodeID:      nodeID,
+		ContainerID: containerID,
+		ExpiresAt:   now.Add(2 * time.Minute),
+	}
+	s.liveLogMu.Unlock()
+
+	s.auditCurrentUser(r, "container.logs.stream.create", nodeID, containerID, streamID, true, "")
+	writeJSON(w, http.StatusCreated, logStreamResponse{StreamID: streamID})
+}
+
+func (s *Server) handleContainerLogStream(w http.ResponseWriter, r *http.Request) {
+	nodeID := strings.TrimSpace(r.PathValue("nodeID"))
+	containerID := strings.TrimSpace(r.PathValue("containerID"))
+	if err := validateNodeID(nodeID); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := validateContainerID(containerID); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	streamID := strings.TrimSpace(r.URL.Query().Get("stream_id"))
+	if err := validateCommandID(streamID); err != nil {
+		http.Error(w, "invalid stream id", http.StatusBadRequest)
+		return
+	}
+	if !s.consumeLiveLogToken(streamID, nodeID, containerID) {
+		http.Error(w, "invalid or expired log stream", http.StatusForbidden)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	eventCh, unsubscribe := s.events.Subscribe()
+	defer unsubscribe()
+
+	cmd := &proto.PanelCommand{
+		CommandId: streamID,
+		Action: &proto.PanelCommand_FollowLogs{
+			FollowLogs: &proto.FollowContainerLogs{
+				Id:        containerID,
+				TailLines: 200,
+				StreamId:  streamID,
+			},
+		},
+	}
+	if err := s.nodeManager.SendCommand(nodeID, cmd); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	defer func() {
+		_ = s.nodeManager.SendCommand(nodeID, &proto.PanelCommand{
+			Action: &proto.PanelCommand_CancelLogs{
+				CancelLogs: &proto.CancelLogStream{StreamId: streamID},
+			},
+		})
+	}()
+
+	s.auditCurrentUser(r, "container.logs.follow", nodeID, containerID, streamID, true, "")
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	if err := events.WriteSSE(w, events.Event{Name: "ready", Data: map[string]string{"stream_id": streamID}}); err != nil {
+		return
+	}
+	flusher.Flush()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case event, ok := <-eventCh:
+			if !ok {
+				return
+			}
+			if event.Name != nodes.EventLogChunk {
+				continue
+			}
+			chunk, ok := event.Data.(nodes.LogChunk)
+			if !ok || chunk.StreamID != streamID || chunk.NodeID != nodeID || chunk.ContainerID != containerID {
+				continue
+			}
+			if err := events.WriteSSE(w, events.Event{Name: nodes.EventLogChunk, Data: chunk}); err != nil {
+				return
+			}
+			flusher.Flush()
+			if chunk.EOF {
+				return
+			}
+		}
+	}
+}
+
+func (s *Server) consumeLiveLogToken(streamID, nodeID, containerID string) bool {
+	now := time.Now()
+	s.liveLogMu.Lock()
+	defer s.liveLogMu.Unlock()
+
+	s.pruneExpiredLiveLogTokens(now)
+	token, ok := s.liveLogTokens[streamID]
+	if !ok {
+		return false
+	}
+	delete(s.liveLogTokens, streamID)
+	return token.NodeID == nodeID && token.ContainerID == containerID && token.ExpiresAt.After(now)
+}
+
+func (s *Server) pruneExpiredLiveLogTokens(now time.Time) {
+	for streamID, token := range s.liveLogTokens {
+		if !token.ExpiresAt.After(now) {
+			delete(s.liveLogTokens, streamID)
+		}
+	}
 }
 
 func (s *Server) handleListContainers(w http.ResponseWriter, r *http.Request) {
@@ -547,13 +810,16 @@ func (s *Server) handleCreateContainer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	dockerName := dockerContainerName(nodeID, commandID)
 
 	cmd := &proto.PanelCommand{
 		CommandId: commandID,
 		Action: &proto.PanelCommand_Create{
 			Create: &proto.CreateContainer{
-				Name:  req.Name,
-				Image: req.Image,
+				Name:        dockerName,
+				Image:       req.Image,
+				DisplayName: req.Name,
+				ResourceId:  commandID,
 			},
 		},
 	}
@@ -567,12 +833,6 @@ func (s *Server) handleCreateContainer(w http.ResponseWriter, r *http.Request) {
 	if err := s.nodeManager.SendCommand(nodeID, cmd); err != nil {
 		s.auditCurrentUser(r, "container.create", nodeID, req.Name, commandID, false, err.Error())
 		_ = s.nodeManager.CompleteCommand(commandID, false, err.Error())
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if err := s.nodeManager.UpsertContainer(nodeID, req.Name, req.Name, req.Image, "create_requested"); err != nil {
-		s.auditCurrentUser(r, "container.create", nodeID, req.Name, commandID, false, err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -654,10 +914,12 @@ func (s *Server) handleContainerCommand(
 		return
 	}
 
-	if err := s.nodeManager.UpdateContainerStatus(nodeID, containerID, status); err != nil {
-		s.auditCurrentUser(r, action, nodeID, containerID, commandID, false, err.Error())
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	if status != "" {
+		if err := s.nodeManager.UpdateContainerStatus(nodeID, containerID, status); err != nil {
+			s.auditCurrentUser(r, action, nodeID, containerID, commandID, false, err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	s.auditCurrentUser(r, action, nodeID, containerID, commandID, true, "")
@@ -774,6 +1036,18 @@ func newCommandID() (string, error) {
 		return "", fmt.Errorf("failed to create command id: %w", err)
 	}
 	return hex.EncodeToString(b[:]), nil
+}
+
+func dockerContainerName(nodeID, resourceID string) string {
+	nodePart := strings.TrimPrefix(nodeID, "node_")
+	if len(nodePart) > 8 {
+		nodePart = nodePart[:8]
+	}
+	resourcePart := resourceID
+	if len(resourcePart) > 12 {
+		resourcePart = resourcePart[:12]
+	}
+	return "deft-" + nodePart + "-" + resourcePart
 }
 
 func writeJSON(w http.ResponseWriter, status int, value interface{}) {

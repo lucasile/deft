@@ -14,6 +14,8 @@ message AgentMessage {
     Heartbeat heartbeat = 2;
     CommandResult result = 3;
     StatsUpdate stats = 4;
+    ContainerInventory inventory = 5;
+    LogChunk log_chunk = 6;
   }
 }
 
@@ -33,6 +35,25 @@ message StatsUpdate {
   uint64 memory_bytes = 3;
 }
 
+message ContainerInventory {
+  repeated ContainerSummary containers = 1;
+}
+
+message ContainerSummary {
+  string id = 1;
+  string name = 2;
+  string image = 3;
+  string status = 4;
+}
+
+message LogChunk {
+  string stream_id = 1;
+  string container_id = 2;
+  bytes data = 3;
+  bool eof = 4;
+  string error = 5;
+}
+
 message PanelCommand {
   string command_id = 1;
   oneof action {
@@ -40,12 +61,18 @@ message PanelCommand {
     StartContainer start = 3;
     StopContainer stop = 4;
     RemoveContainer remove = 5;
+    ShutdownAgent shutdown = 6;
+    GetContainerLogs logs = 7;
+    FollowContainerLogs follow_logs = 8;
+    CancelLogStream cancel_logs = 9;
   }
 }
 
 message CreateContainer {
   string name = 1;
   string image = 2;
+  string display_name = 3;
+  string resource_id = 4;
 }
 
 message StartContainer {
@@ -58,4 +85,21 @@ message StopContainer {
 
 message RemoveContainer {
   string id = 1;
+}
+
+message ShutdownAgent {}
+
+message GetContainerLogs {
+  string id = 1;
+  int32 tail_lines = 2;
+}
+
+message FollowContainerLogs {
+  string id = 1;
+  int32 tail_lines = 2;
+  string stream_id = 3;
+}
+
+message CancelLogStream {
+  string stream_id = 1;
 }

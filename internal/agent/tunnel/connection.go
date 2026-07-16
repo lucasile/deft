@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/lucasile/deft/internal/proto"
@@ -17,6 +18,7 @@ import (
 type Connection struct {
 	client proto.AgentServiceClient
 	stream proto.AgentService_ConnectClient
+	sendMu sync.Mutex
 }
 
 func NewConnection(ctx context.Context, addr string, caPath, certPath, keyPath string) (*Connection, error) {
@@ -81,11 +83,17 @@ func (c *Connection) SendHeartbeat(nodeID string) error {
 			},
 		},
 	}
-	return c.stream.Send(msg)
+	return c.SendMessage(msg)
 }
 
 func (c *Connection) Receive() (*proto.PanelCommand, error) {
 	return c.stream.Recv()
+}
+
+func (c *Connection) SendMessage(msg *proto.AgentMessage) error {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	return c.stream.Send(msg)
 }
 
 func loadTLSCredentials(caPath, certPath, keyPath string) (credentials.TransportCredentials, error) {

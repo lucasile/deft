@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-//go:embed web/build/*
+//go:embed all:web/build
 var webAssets embed.FS
 
 func GetFS() (fs.FS, error) {
