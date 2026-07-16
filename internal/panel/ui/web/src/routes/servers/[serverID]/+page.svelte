@@ -90,7 +90,7 @@
 	};
 
 	const runServerAction = async (action: 'start' | 'stop' | 'remove') => {
-		if (!server?.node_id || !server.container_id || !canAct) return;
+		if (!server || !canAct) return;
 		busy = true;
 		error = null;
 		const previousStatus = localServerStatus;
@@ -99,7 +99,7 @@
 			if (action === 'start') {
 				autoStartedLogForStatus = '';
 			}
-			const response = await panel.containerAction(server.node_id, server.container_id, action);
+			const response = await panel.serverAction(server.id, action);
 			pendingActionCommandID = response.command_id;
 			if (action === 'remove') {
 				stopLiveLogs();

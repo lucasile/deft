@@ -318,6 +318,16 @@ export const panel = {
 		return response.json();
 	},
 
+	serverAction: async (serverID: string, action: 'start' | 'stop' | 'remove'): Promise<CommandResponse> => {
+		const response = await apiFetch(`/api/servers/${serverID}/${action}`, {
+			method: 'POST',
+		});
+		if (!response.ok) {
+			throw new Error(await response.text());
+		}
+		return response.json();
+	},
+
 	events: (): EventSource => {
 		return new EventSource('/api/events', { withCredentials: true });
 	},

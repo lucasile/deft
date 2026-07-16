@@ -86,6 +86,9 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/commands/{commandID}", s.requireAuth(s.handleGetCommand))
 	mux.HandleFunc("GET /api/servers", s.requireAuth(s.handleListServers))
 	mux.HandleFunc("GET /api/servers/{serverID}", s.requireAuth(s.handleGetServer))
+	mux.HandleFunc("POST /api/servers/{serverID}/start", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStartServer))))
+	mux.HandleFunc("POST /api/servers/{serverID}/stop", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStopServer))))
+	mux.HandleFunc("POST /api/servers/{serverID}/remove", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleRemoveServer))))
 	mux.HandleFunc("GET /api/nodes/{nodeID}/containers", s.requireAuth(s.handleListContainers))
 	mux.HandleFunc("POST /api/nodes/{nodeID}/containers", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleCreateContainer))))
 	mux.HandleFunc("POST /api/nodes/{nodeID}/containers/{containerID}/start", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStartContainer))))
@@ -551,7 +554,7 @@ func (s *Server) handleStopNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.auditCurrentUser(r, "agent.stop", nodeID, nodeID, commandID, true, "")
-	writeJSON(w, http.StatusAccepted, commandResponse{CommandID: commandID, ServerID: commandID})
+	writeJSON(w, http.StatusAccepted, commandResponse{CommandID: commandID})
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
@@ -650,6 +653,87 @@ func (s *Server) handleGetServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, server)
+}
+
+func (s *Server) handleStartServer(w http.ResponseWriter, r *http.Request) {
+	s.handleServerContainerCommand(w, r, func(commandID string, server servers.Server) *proto.PanelCommand {
+		return &proto.PanelCommand{
+			CommandId: commandID,
+			Action: &proto.PanelCommand_Start{
+				Start: &proto.StartContainer{Id: server.ContainerID},
+			},
+		}
+	}, "container.start", "server.start", "start_requested")
+}
+
+func (s *Server) handleStopServer(w http.ResponseWriter, r *http.Request) {
+	s.handleServerContainerCommand(w, r, func(commandID string, server servers.Server) *proto.PanelCommand {
+		return &proto.PanelCommand{
+			CommandId: commandID,
+			Action: &proto.PanelCommand_Stop{
+				Stop: &proto.StopContainer{Id: server.ContainerID},
+			},
+		}
+	}, "container.stop", "server.stop", "stop_requested")
+}
+
+func (s *Server) handleRemoveServer(w http.ResponseWriter, r *http.Request) {
+	s.handleServerContainerCommand(w, r, func(commandID string, server servers.Server) *proto.PanelCommand {
+		return &proto.PanelCommand{
+			CommandId: commandID,
+			Action: &proto.PanelCommand_Remove{
+				Remove: &proto.RemoveContainer{Id: server.ContainerID},
+			},
+		}
+	}, "container.remove", "server.remove", "remove_requested")
+}
+
+func (s *Server) handleServerContainerCommand(
+	w http.ResponseWriter,
+	r *http.Request,
+	buildCommand func(commandID string, server servers.Server) *proto.PanelCommand,
+	commandAction string,
+	auditAction string,
+	status string,
+) {
+	serverID := strings.TrimSpace(r.PathValue("serverID"))
+	if err := validateCommandID(serverID); err != nil {
+		s.auditCurrentUser(r, auditAction, "", serverID, "", false, "invalid server id")
+		http.Error(w, "invalid server id", http.StatusBadRequest)
+		return
+	}
+
+	server, err := s.serverManager.Get(serverID)
+	if err != nil {
+		s.auditCurrentUser(r, auditAction, "", serverID, "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if server.ContainerID == "" {
+		s.auditCurrentUser(r, auditAction, server.NodeID, serverID, "", false, "server has no linked container")
+		http.Error(w, "server has no linked container", http.StatusConflict)
+		return
+	}
+
+	commandID, err := s.dispatchContainerCommand(server.NodeID, server.ContainerID, commandAction, status, func(commandID, _ string) *proto.PanelCommand {
+		return buildCommand(commandID, *server)
+	})
+	if err != nil {
+		s.auditCurrentUser(r, auditAction, server.NodeID, serverID, commandID, false, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if status != "" {
+		if err := s.serverManager.UpdateStatus(server.ID, status); err != nil {
+			s.auditCurrentUser(r, auditAction, server.NodeID, serverID, commandID, false, err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	s.auditCurrentUser(r, auditAction, server.NodeID, serverID, commandID, true, "")
+	writeJSON(w, http.StatusAccepted, commandResponse{CommandID: commandID, ServerID: server.ID})
 }
 
 func (s *Server) handleContainerLogs(w http.ResponseWriter, r *http.Request) {
@@ -1053,36 +1137,45 @@ func (s *Server) handleContainerCommand(
 		return
 	}
 
-	commandID, err := newCommandID()
+	commandID, err := s.dispatchContainerCommand(nodeID, containerID, action, status, buildCommand)
 	if err != nil {
-		s.auditCurrentUser(r, action, nodeID, containerID, "", false, err.Error())
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if err := s.nodeManager.CreateCommand(commandID, nodeID, action, containerID); err != nil {
 		s.auditCurrentUser(r, action, nodeID, containerID, commandID, false, err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	if err := s.nodeManager.SendCommand(nodeID, buildCommand(commandID, containerID)); err != nil {
-		s.auditCurrentUser(r, action, nodeID, containerID, commandID, false, err.Error())
-		_ = s.nodeManager.CompleteCommand(commandID, false, err.Error())
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if status != "" {
-		if err := s.nodeManager.UpdateContainerStatus(nodeID, containerID, status); err != nil {
-			s.auditCurrentUser(r, action, nodeID, containerID, commandID, false, err.Error())
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 	}
 
 	s.auditCurrentUser(r, action, nodeID, containerID, commandID, true, "")
 	writeJSON(w, http.StatusAccepted, commandResponse{CommandID: commandID})
+}
+
+func (s *Server) dispatchContainerCommand(
+	nodeID string,
+	containerID string,
+	action string,
+	status string,
+	buildCommand func(commandID, containerID string) *proto.PanelCommand,
+) (string, error) {
+	commandID, err := newCommandID()
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.nodeManager.CreateCommand(commandID, nodeID, action, containerID); err != nil {
+		return commandID, err
+	}
+
+	if err := s.nodeManager.SendCommand(nodeID, buildCommand(commandID, containerID)); err != nil {
+		_ = s.nodeManager.CompleteCommand(commandID, false, err.Error())
+		return commandID, err
+	}
+
+	if status != "" {
+		if err := s.nodeManager.UpdateContainerStatus(nodeID, containerID, status); err != nil {
+			return commandID, err
+		}
+	}
+
+	return commandID, nil
 }
 
 func (s *Server) rateLimitAuth(next http.HandlerFunc) http.HandlerFunc {
