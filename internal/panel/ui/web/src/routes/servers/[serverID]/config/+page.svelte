@@ -8,6 +8,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { backOrGoto } from '$lib/navigation';
+	import { serverStateLabel, serverStateVariant } from '$lib/server-status';
 
 	let server = $state<Server | null>(null);
 	let loading = $state(true);
@@ -121,7 +122,7 @@
 								<p class="truncate text-sm font-medium text-white">{server.name}</p>
 								<p class="mt-1 truncate font-mono text-xs text-zinc-500">{server.id}</p>
 							</div>
-							<Badge>{server.status || 'unknown'}</Badge>
+							<Badge variant={serverStateVariant(server.status)}>{serverStateLabel(server.status)}</Badge>
 						</div>
 
 						<div class="grid gap-3 text-sm">

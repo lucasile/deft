@@ -51,6 +51,7 @@
 - [x] Added real server restart support: protobuf `RestartContainer`, agent Docker restart dispatch, `POST /api/servers/{serverID}/restart`, and a server page Restart action.
 - [x] Removed/removing/missing servers are hidden from the default dashboard server list. Inventory sync no longer rewrites a `remove_requested` server to `missing` while removal is settling.
 - [x] Added the first recipe foundation: recipe files, `GET /api/recipes`, recipe-driven server creation, recipe-rendered Docker config, and recipe input metadata for future user/admin edit permissions.
+- [x] Added normalized server state helpers for the UI so normal surfaces show product states (`online`, `offline`, `starting`, `stopping`, etc.) instead of raw Docker/container status strings, and server action buttons are enabled only for valid states.
 
 ## Current Task
 **Implement Panel gRPC Server & REST API Core**
@@ -82,6 +83,7 @@ The panel should:
 - Successful server creation should land on the server detail page, not the node/container debug page.
 - Server detail should become the main management surface for actions, logs, config, health, and backups. Raw container pages can remain available as advanced/debug views, but should not be the normal user path.
 - Server detail pages should live-update from panel events anywhere status or linked container state can change.
+- User-facing server surfaces should use normalized server states. Avoid showing raw Docker/container states such as `running`, `created`, `exited`, or `*_requested` outside advanced/debug views.
 - Until dedicated server action APIs exist, server page actions may call the linked container APIs under the hood. Keep that implementation detail out of the primary UX.
 - Server action APIs are the normal UI boundary. They may still dispatch linked container commands internally, but frontend server management should call `/api/servers/{serverID}/...`.
 - Restart is a typed panel-to-agent command, not a UI stop/start sequence.

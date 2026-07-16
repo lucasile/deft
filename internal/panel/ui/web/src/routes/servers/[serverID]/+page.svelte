@@ -10,6 +10,15 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { backOrGoto } from '$lib/navigation';
+	import {
+		serverCanRemove,
+		serverCanRestart,
+		serverCanStart,
+		serverCanStop,
+		serverState,
+		serverStateLabel,
+		serverStateVariant,
+	} from '$lib/server-status';
 
 	let server = $state<Server | null>(null);
 	let loading = $state(true);
@@ -29,13 +38,10 @@
 
 	const serverID = $derived(page.params.serverID);
 	const displayStatus = $derived(localServerStatus || server?.status || '');
-	const actionPending = $derived(displayStatus.endsWith('_requested'));
-	const hasLinkedContainer = $derived(Boolean(server?.node_id && server.container_id));
-	const canAct = $derived(Boolean(hasLinkedContainer && !actionPending));
-	const canStart = $derived(Boolean(canAct && displayStatus !== 'running'));
-	const canStop = $derived(Boolean(canAct && displayStatus === 'running'));
-	const canRestart = $derived(Boolean(canAct && displayStatus === 'running'));
-	const canRemove = $derived(Boolean(canAct));
+	const canStart = $derived(serverCanStart(server, displayStatus));
+	const canStop = $derived(serverCanStop(server, displayStatus));
+	const canRestart = $derived(serverCanRestart(server, displayStatus));
+	const canRemove = $derived(serverCanRemove(server, displayStatus));
 
 	onMount(() => {
 		void loadInitialData();
@@ -91,7 +97,7 @@
 	};
 
 	const runServerAction = async (action: 'start' | 'stop' | 'restart' | 'remove') => {
-		if (!server || !canAct) return;
+		if (!server || !actionAllowed(action)) return;
 		busy = true;
 		error = null;
 		const previousStatus = localServerStatus;
@@ -119,22 +125,29 @@
 	};
 
 	const requestedStatus = (action: 'start' | 'stop' | 'restart' | 'remove') => {
-		if (action === 'start') return 'start_requested';
-		if (action === 'stop') return 'stop_requested';
-		if (action === 'restart') return 'restart_requested';
-		return 'remove_requested';
+		if (action === 'start') return 'starting';
+		if (action === 'stop') return 'stopping';
+		if (action === 'restart') return 'restarting';
+		return 'removing';
+	};
+
+	const actionAllowed = (action: 'start' | 'stop' | 'restart' | 'remove') => {
+		if (action === 'start') return canStart;
+		if (action === 'stop') return canStop;
+		if (action === 'restart') return canRestart;
+		return canRemove;
 	};
 
 	const reconcileLocalServerStatus = (nextServer: Server) => {
 		if (!localServerStatus) return;
-		if (nextServer.status && nextServer.status !== localServerStatus && !nextServer.status.endsWith('_requested')) {
+		if (serverState(nextServer.status) !== serverState(localServerStatus)) {
 			localServerStatus = null;
 			pendingActionCommandID = '';
 		}
 	};
 
 	const maybeStartLogsForRunningServer = (nextServer: Server) => {
-		if (!nextServer.node_id || !nextServer.container_id || nextServer.status !== 'running') return;
+		if (!nextServer.node_id || !nextServer.container_id || serverState(nextServer.status) !== 'online') return;
 		if (logEvents || logLoading || logLive) return;
 
 		const statusKey = `${nextServer.container_id}:running`;
@@ -220,15 +233,6 @@
 	const logout = async () => {
 		await auth.logout();
 		goto('/login');
-	};
-
-	type BadgeVariant = 'default' | 'secondary' | 'success' | 'warning' | 'destructive';
-
-	const statusVariant = (status = ''): BadgeVariant => {
-		if (status === 'running') return 'success';
-		if (status.endsWith('_requested')) return 'warning';
-		if (status === 'failed' || status === 'missing') return 'destructive';
-		return 'default';
 	};
 
 	const formatTime = (seconds: number) => {
@@ -335,7 +339,7 @@
 								<p class="truncate text-sm font-medium text-white">{server.name}</p>
 								<p class="mt-1 truncate font-mono text-xs text-zinc-500">{server.id}</p>
 							</div>
-							<Badge variant={statusVariant(displayStatus)}>{displayStatus || 'unknown'}</Badge>
+							<Badge variant={serverStateVariant(displayStatus)}>{serverStateLabel(displayStatus)}</Badge>
 						</div>
 
 						<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">

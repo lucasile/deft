@@ -7,6 +7,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
+	import { serverStateLabel, serverStateVariant } from '$lib/server-status';
 
 	let nodes = $state<Node[]>([]);
 	let servers = $state<Server[]>([]);
@@ -209,15 +210,6 @@
 		}
 	};
 
-	type BadgeVariant = 'default' | 'secondary' | 'success' | 'warning' | 'destructive';
-
-	const serverStatusVariant = (status = ''): BadgeVariant => {
-		if (status === 'running') return 'success';
-		if (status.endsWith('_requested')) return 'warning';
-		if (status === 'failed' || status === 'missing') return 'destructive';
-		return 'default';
-	};
-
 </script>
 
 <svelte:head>
@@ -283,8 +275,8 @@
 							<div class="min-w-0">
 								<div class="flex items-center gap-2">
 									<span class="truncate font-medium text-white">{server.name}</span>
-									<Badge variant={serverStatusVariant(server.status)}>
-										{server.status || 'unknown'}
+									<Badge variant={serverStateVariant(server.status)}>
+										{serverStateLabel(server.status)}
 									</Badge>
 								</div>
 								<p class="mt-1 truncate text-sm text-zinc-400">{server.image}</p>
