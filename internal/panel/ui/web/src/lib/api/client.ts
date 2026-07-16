@@ -369,6 +369,17 @@ export const panel = {
 		return response.json();
 	},
 
+	serverConsoleCommand: async (serverID: string, command: string): Promise<CommandResponse> => {
+		const response = await apiFetch(`/api/servers/${serverID}/console`, {
+			method: 'POST',
+			body: JSON.stringify({ command }),
+		});
+		if (!response.ok) {
+			throw new Error(await response.text());
+		}
+		return response.json();
+	},
+
 	events: (): EventSource => {
 		return new EventSource('/api/events', { withCredentials: true });
 	},

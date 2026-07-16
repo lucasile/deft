@@ -533,6 +533,7 @@ type PanelCommand struct {
 	//	*PanelCommand_FollowLogs
 	//	*PanelCommand_CancelLogs
 	//	*PanelCommand_Restart
+	//	*PanelCommand_ConsoleCommand
 	Action        isPanelCommand_Action `protobuf_oneof:"action"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -663,6 +664,15 @@ func (x *PanelCommand) GetRestart() *RestartContainer {
 	return nil
 }
 
+func (x *PanelCommand) GetConsoleCommand() *SendConsoleCommand {
+	if x != nil {
+		if x, ok := x.Action.(*PanelCommand_ConsoleCommand); ok {
+			return x.ConsoleCommand
+		}
+	}
+	return nil
+}
+
 type isPanelCommand_Action interface {
 	isPanelCommand_Action()
 }
@@ -703,6 +713,10 @@ type PanelCommand_Restart struct {
 	Restart *RestartContainer `protobuf:"bytes,10,opt,name=restart,proto3,oneof"`
 }
 
+type PanelCommand_ConsoleCommand struct {
+	ConsoleCommand *SendConsoleCommand `protobuf:"bytes,11,opt,name=console_command,json=consoleCommand,proto3,oneof"`
+}
+
 func (*PanelCommand_Create) isPanelCommand_Action() {}
 
 func (*PanelCommand_Start) isPanelCommand_Action() {}
@@ -720,6 +734,8 @@ func (*PanelCommand_FollowLogs) isPanelCommand_Action() {}
 func (*PanelCommand_CancelLogs) isPanelCommand_Action() {}
 
 func (*PanelCommand_Restart) isPanelCommand_Action() {}
+
+func (*PanelCommand_ConsoleCommand) isPanelCommand_Action() {}
 
 type CreateContainer struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1361,6 +1377,58 @@ func (x *CancelLogStream) GetStreamId() string {
 	return ""
 }
 
+type SendConsoleCommand struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Command       string                 `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SendConsoleCommand) Reset() {
+	*x = SendConsoleCommand{}
+	mi := &file_internal_proto_agent_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendConsoleCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendConsoleCommand) ProtoMessage() {}
+
+func (x *SendConsoleCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_agent_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SendConsoleCommand.ProtoReflect.Descriptor instead.
+func (*SendConsoleCommand) Descriptor() ([]byte, []int) {
+	return file_internal_proto_agent_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *SendConsoleCommand) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SendConsoleCommand) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
 var File_internal_proto_agent_proto protoreflect.FileDescriptor
 
 const file_internal_proto_agent_proto_rawDesc = "" +
@@ -1402,7 +1470,7 @@ const file_internal_proto_agent_proto_rawDesc = "" +
 	"\fcontainer_id\x18\x02 \x01(\tR\vcontainerId\x12\x12\n" +
 	"\x04data\x18\x03 \x01(\fR\x04data\x12\x10\n" +
 	"\x03eof\x18\x04 \x01(\bR\x03eof\x12\x14\n" +
-	"\x05error\x18\x05 \x01(\tR\x05error\"\xff\x03\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error\"\xc4\x04\n" +
 	"\fPanelCommand\x12\x1d\n" +
 	"\n" +
 	"command_id\x18\x01 \x01(\tR\tcommandId\x12/\n" +
@@ -1417,7 +1485,8 @@ const file_internal_proto_agent_proto_rawDesc = "" +
 	"\vcancel_logs\x18\t \x01(\v2\x15.deft.CancelLogStreamH\x00R\n" +
 	"cancelLogs\x122\n" +
 	"\arestart\x18\n" +
-	" \x01(\v2\x16.deft.RestartContainerH\x00R\arestartB\b\n" +
+	" \x01(\v2\x16.deft.RestartContainerH\x00R\arestart\x12C\n" +
+	"\x0fconsole_command\x18\v \x01(\v2\x18.deft.SendConsoleCommandH\x00R\x0econsoleCommandB\b\n" +
 	"\x06action\"\x9c\x02\n" +
 	"\x0fCreateContainer\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
@@ -1459,7 +1528,10 @@ const file_internal_proto_agent_proto_rawDesc = "" +
 	"tail_lines\x18\x02 \x01(\x05R\ttailLines\x12\x1b\n" +
 	"\tstream_id\x18\x03 \x01(\tR\bstreamId\".\n" +
 	"\x0fCancelLogStream\x12\x1b\n" +
-	"\tstream_id\x18\x01 \x01(\tR\bstreamId2G\n" +
+	"\tstream_id\x18\x01 \x01(\tR\bstreamId\">\n" +
+	"\x12SendConsoleCommand\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
+	"\acommand\x18\x02 \x01(\tR\acommand2G\n" +
 	"\fAgentService\x127\n" +
 	"\aConnect\x12\x12.deft.AgentMessage\x1a\x12.deft.PanelCommand\"\x00(\x010\x01B)Z'github.com/lucasile/deft/internal/protob\x06proto3"
 
@@ -1475,7 +1547,7 @@ func file_internal_proto_agent_proto_rawDescGZIP() []byte {
 	return file_internal_proto_agent_proto_rawDescData
 }
 
-var file_internal_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_internal_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_internal_proto_agent_proto_goTypes = []any{
 	(*AgentMessage)(nil),        // 0: deft.AgentMessage
 	(*Heartbeat)(nil),           // 1: deft.Heartbeat
@@ -1497,6 +1569,7 @@ var file_internal_proto_agent_proto_goTypes = []any{
 	(*GetContainerLogs)(nil),    // 17: deft.GetContainerLogs
 	(*FollowContainerLogs)(nil), // 18: deft.FollowContainerLogs
 	(*CancelLogStream)(nil),     // 19: deft.CancelLogStream
+	(*SendConsoleCommand)(nil),  // 20: deft.SendConsoleCommand
 }
 var file_internal_proto_agent_proto_depIdxs = []int32{
 	1,  // 0: deft.AgentMessage.heartbeat:type_name -> deft.Heartbeat
@@ -1514,16 +1587,17 @@ var file_internal_proto_agent_proto_depIdxs = []int32{
 	18, // 12: deft.PanelCommand.follow_logs:type_name -> deft.FollowContainerLogs
 	19, // 13: deft.PanelCommand.cancel_logs:type_name -> deft.CancelLogStream
 	15, // 14: deft.PanelCommand.restart:type_name -> deft.RestartContainer
-	9,  // 15: deft.CreateContainer.ports:type_name -> deft.PortMapping
-	10, // 16: deft.CreateContainer.env:type_name -> deft.EnvVar
-	11, // 17: deft.CreateContainer.volumes:type_name -> deft.VolumeMount
-	0,  // 18: deft.AgentService.Connect:input_type -> deft.AgentMessage
-	7,  // 19: deft.AgentService.Connect:output_type -> deft.PanelCommand
-	19, // [19:20] is the sub-list for method output_type
-	18, // [18:19] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	20, // 15: deft.PanelCommand.console_command:type_name -> deft.SendConsoleCommand
+	9,  // 16: deft.CreateContainer.ports:type_name -> deft.PortMapping
+	10, // 17: deft.CreateContainer.env:type_name -> deft.EnvVar
+	11, // 18: deft.CreateContainer.volumes:type_name -> deft.VolumeMount
+	0,  // 19: deft.AgentService.Connect:input_type -> deft.AgentMessage
+	7,  // 20: deft.AgentService.Connect:output_type -> deft.PanelCommand
+	20, // [20:21] is the sub-list for method output_type
+	19, // [19:20] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_internal_proto_agent_proto_init() }
@@ -1548,6 +1622,7 @@ func file_internal_proto_agent_proto_init() {
 		(*PanelCommand_FollowLogs)(nil),
 		(*PanelCommand_CancelLogs)(nil),
 		(*PanelCommand_Restart)(nil),
+		(*PanelCommand_ConsoleCommand)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1555,7 +1630,7 @@ func file_internal_proto_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_proto_agent_proto_rawDesc), len(file_internal_proto_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

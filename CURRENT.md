@@ -52,6 +52,7 @@
 - [x] Removed/removing/missing servers are hidden from the default dashboard server list. Inventory sync no longer rewrites a `remove_requested` server to `missing` while removal is settling.
 - [x] Added the first recipe foundation: recipe files, `GET /api/recipes`, recipe-driven server creation, recipe-rendered Docker config, and recipe input metadata for future user/admin edit permissions.
 - [x] Added normalized server state helpers for the UI so normal surfaces show product states (`online`, `offline`, `starting`, `stopping`, etc.) instead of raw Docker/container status strings, and server action buttons are enabled only for valid states.
+- [x] Added server console command support: typed protobuf `SendConsoleCommand`, panel `POST /api/servers/{serverID}/console`, audited command records, agent Docker stdin dispatch, and a server page console form for online servers.
 
 ## Current Task
 **Implement Panel gRPC Server & REST API Core**
@@ -76,6 +77,7 @@ The panel should:
 - Browser live updates should use authenticated SSE invalidation events before adding polling. Use WebSockets only when the browser needs bidirectional streams such as console input.
 - Live log streams are read-only SSE. Starting a stream must remain CSRF-protected; do not let unauthenticated or plain cross-site GET requests trigger agent actions.
 - Keep panel-to-agent operations typed and allowlisted through protobuf. Do not add arbitrary host command execution.
+- Console commands are server stdin/game-console commands only. Keep them scoped to a linked online server container, validate as a single line, audit them, and do not expand this into arbitrary host shell execution.
 - Deft should manage labeled containers by default. Do not treat every Docker container on the host as managed; unmanaged discovery should be explicit and read-only at first.
 - User-facing names are display names, not Docker container names. Docker names should be generated and treated as implementation details.
 - Servers are the intended product object. Containers are implementation detail/debug surface. New game, WireGuard, backups, and settings work should attach to servers first.

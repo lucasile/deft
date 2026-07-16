@@ -81,3 +81,19 @@ func TestValidateCreateContainerConfigRejectsBadRestartPolicy(t *testing.T) {
 		t.Fatal("expected bad restart policy to be rejected")
 	}
 }
+
+func TestValidateConsoleCommand(t *testing.T) {
+	valid := []string{"say hello", "whitelist add player_1", "stop"}
+	for _, value := range valid {
+		if err := validateConsoleCommand(value); err != nil {
+			t.Fatalf("expected %q to be valid: %v", value, err)
+		}
+	}
+
+	invalid := []string{"", "say hello\nstop", "say hello\rstop", "bad\x00command"}
+	for _, value := range invalid {
+		if err := validateConsoleCommand(value); err == nil {
+			t.Fatalf("expected %q to be invalid", value)
+		}
+	}
+}

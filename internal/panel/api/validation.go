@@ -127,6 +127,19 @@ func validateEnvValue(value string) error {
 	return nil
 }
 
+func validateConsoleCommand(value string) error {
+	if value == "" {
+		return fmt.Errorf("command is required")
+	}
+	if len(value) > 512 {
+		return fmt.Errorf("command must be 512 characters or less")
+	}
+	if strings.ContainsAny(value, "\x00\r\n") {
+		return fmt.Errorf("command must be a single line and cannot contain NUL bytes")
+	}
+	return nil
+}
+
 func validateVolumeHostPath(value string) error {
 	cleaned := filepath.Clean(value)
 	if value != cleaned || !strings.HasPrefix(cleaned, "/var/lib/deft/volumes/") {

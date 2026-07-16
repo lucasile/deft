@@ -67,6 +67,7 @@ message PanelCommand {
     FollowContainerLogs follow_logs = 8;
     CancelLogStream cancel_logs = 9;
     RestartContainer restart = 10;
+    SendConsoleCommand console_command = 11;
   }
 }
 
@@ -129,4 +130,9 @@ message FollowContainerLogs {
 
 message CancelLogStream {
   string stream_id = 1;
+}
+
+message SendConsoleCommand {
+  string id = 1;
+  string command = 2;
 }

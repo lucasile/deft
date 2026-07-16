@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { ArrowLeft, Box, Clock3, Container, LogOut, Play, RefreshCw, Settings, Square, Trash2, ServerIcon } from '@lucide/svelte';
+	import { ArrowLeft, Box, Clock3, Container, LogOut, Play, RefreshCw, Send, Settings, Square, Trash2, ServerIcon, Terminal } from '@lucide/svelte';
 	import { auth, panel, type LogChunkPayload, type PanelEventPayload, type Server } from '$lib/api/client';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { Badge } from '$lib/components/ui/badge';
@@ -28,6 +28,11 @@
 	let logLoading = $state(false);
 	let logError = $state<string | null>(null);
 	let logLive = $state(false);
+	let consoleCommand = $state('');
+	let consoleBusy = $state(false);
+	let consoleMessage = $state('');
+	let consoleError = $state<string | null>(null);
+	let consoleCommandID = $state('');
 	let localServerStatus = $state<string | null>(null);
 	let pendingActionCommandID = $state('');
 	let confirmAction = $state<'remove-server' | null>(null);
@@ -42,6 +47,7 @@
 	const canStop = $derived(serverCanStop(server, displayStatus));
 	const canRestart = $derived(serverCanRestart(server, displayStatus));
 	const canRemove = $derived(serverCanRemove(server, displayStatus));
+	const canSendConsoleCommand = $derived(Boolean(server?.container_id && serverState(displayStatus) === 'online'));
 
 	onMount(() => {
 		void loadInitialData();
@@ -57,6 +63,9 @@
 			const payload = parseEventPayload(event);
 			if (payload.command_id && payload.command_id === pendingActionCommandID) {
 				pendingActionCommandID = '';
+			}
+			if (payload.command_id && payload.command_id === consoleCommandID) {
+				void loadConsoleCommandResult(payload.command_id);
 			}
 			void loadServer({ quiet: true });
 		});
@@ -221,6 +230,49 @@
 			logEvents = null;
 		}
 		logLive = false;
+	};
+
+	const sendConsoleCommand = async () => {
+		if (!server || !canSendConsoleCommand || consoleBusy) return;
+
+		const command = consoleCommand.trim();
+		if (!command) {
+			consoleError = 'Command is required.';
+			consoleMessage = '';
+			return;
+		}
+
+		consoleBusy = true;
+		consoleError = null;
+		consoleMessage = 'Sending command...';
+		try {
+			const response = await panel.serverConsoleCommand(server.id, command);
+			consoleCommandID = response.command_id;
+			consoleCommand = '';
+			consoleMessage = 'Command sent.';
+		} catch (err) {
+			consoleCommandID = '';
+			consoleMessage = '';
+			consoleError = cleanError(err);
+		} finally {
+			consoleBusy = false;
+		}
+	};
+
+	const loadConsoleCommandResult = async (commandID: string) => {
+		try {
+			const command = await panel.command(commandID);
+			consoleCommandID = '';
+			if (command.status === 'failed') {
+				consoleMessage = '';
+				consoleError = command.message || 'Command failed.';
+				return;
+			}
+			consoleError = null;
+			consoleMessage = command.message || 'Command sent.';
+		} catch (err) {
+			consoleError = cleanError(err);
+		}
 	};
 
 	const scrollLogsToBottom = async () => {
@@ -414,6 +466,47 @@
 		</section>
 
 		<section class="space-y-6">
+			<Card>
+				<CardHeader class="flex flex-row items-center justify-between">
+					<div>
+						<CardTitle>Console</CardTitle>
+						<p class="text-sm text-zinc-400">{canSendConsoleCommand ? 'Ready' : 'Server must be online'}</p>
+					</div>
+					<Terminal size={18} class="text-zinc-500" />
+				</CardHeader>
+				<CardContent class="space-y-3">
+					{#if consoleError}
+						<div class="rounded-md border border-red-900/60 bg-red-950/60 px-3 py-2 text-sm text-red-200">
+							{consoleError}
+						</div>
+					{/if}
+					{#if consoleMessage}
+						<div class="rounded-md border border-emerald-900/60 bg-emerald-950/50 px-3 py-2 text-sm text-emerald-200">
+							{consoleMessage}
+						</div>
+					{/if}
+					<form
+						class="grid gap-2 sm:grid-cols-[1fr_auto]"
+						onsubmit={(event) => {
+							event.preventDefault();
+							void sendConsoleCommand();
+						}}
+					>
+						<input
+							class="h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
+							placeholder="say Hello from Deft"
+							maxlength="512"
+							bind:value={consoleCommand}
+							disabled={consoleBusy || !canSendConsoleCommand}
+						/>
+						<Button type="submit" disabled={consoleBusy || !canSendConsoleCommand || !consoleCommand.trim()}>
+							<Send size={15} />
+							{consoleBusy ? 'Sending...' : 'Send'}
+						</Button>
+					</form>
+				</CardContent>
+			</Card>
+
 			<Card>
 				<CardHeader class="flex flex-row items-center justify-between">
 					<div>

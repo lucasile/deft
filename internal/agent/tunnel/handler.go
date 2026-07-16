@@ -78,6 +78,9 @@ func (h *Handler) HandleCommand(ctx context.Context, cmd *proto.PanelCommand) er
 	case *proto.PanelCommand_Restart:
 		err = dockercontainer.Restart(ctx, h.docker, a.Restart.Id)
 		msg = "Container restarted"
+	case *proto.PanelCommand_ConsoleCommand:
+		err = console.SendCommand(ctx, h.docker, a.ConsoleCommand.Id, a.ConsoleCommand.Command)
+		msg = "Command sent"
 	case *proto.PanelCommand_Shutdown:
 		msg = "Agent stopping"
 	case *proto.PanelCommand_Logs:

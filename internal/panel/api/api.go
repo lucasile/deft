@@ -91,6 +91,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/servers/{serverID}/start", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStartServer))))
 	mux.HandleFunc("POST /api/servers/{serverID}/stop", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStopServer))))
 	mux.HandleFunc("POST /api/servers/{serverID}/restart", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleRestartServer))))
+	mux.HandleFunc("POST /api/servers/{serverID}/console", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleServerConsoleCommand))))
 	mux.HandleFunc("POST /api/servers/{serverID}/remove", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleRemoveServer))))
 	mux.HandleFunc("GET /api/nodes/{nodeID}/containers", s.requireAuth(s.handleListContainers))
 	mux.HandleFunc("POST /api/nodes/{nodeID}/containers", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleCreateContainer))))
@@ -125,6 +126,10 @@ type createContainerRequest struct {
 	RestartPolicy string               `json:"restart_policy,omitempty"`
 	RecipeID      string               `json:"recipe_id,omitempty"`
 	RecipeValues  map[string]any       `json:"recipe_values,omitempty"`
+}
+
+type consoleCommandRequest struct {
+	Command string `json:"command"`
 }
 
 type commandResponse struct {
@@ -695,6 +700,77 @@ func (s *Server) handleRestartServer(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 	}, "container.restart", "server.restart", "restart_requested")
+}
+
+func (s *Server) handleServerConsoleCommand(w http.ResponseWriter, r *http.Request) {
+	serverID := strings.TrimSpace(r.PathValue("serverID"))
+	if err := validateCommandID(serverID); err != nil {
+		s.auditCurrentUser(r, "server.console", "", serverID, "", false, "invalid server id")
+		http.Error(w, "invalid server id", http.StatusBadRequest)
+		return
+	}
+
+	var req consoleCommandRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		s.auditCurrentUser(r, "server.console", "", serverID, "", false, "invalid json body")
+		http.Error(w, "invalid json body", http.StatusBadRequest)
+		return
+	}
+	req.Command = strings.TrimSpace(req.Command)
+	if err := validateConsoleCommand(req.Command); err != nil {
+		s.auditCurrentUser(r, "server.console", "", serverID, "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	server, err := s.serverManager.Get(serverID)
+	if err != nil {
+		s.auditCurrentUser(r, "server.console", "", serverID, "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if server.ContainerID == "" {
+		s.auditCurrentUser(r, "server.console", server.NodeID, serverID, "", false, "server has no linked container")
+		http.Error(w, "server has no linked container", http.StatusConflict)
+		return
+	}
+	if server.Status != "running" {
+		s.auditCurrentUser(r, "server.console", server.NodeID, serverID, "", false, "server is not online")
+		http.Error(w, "server is not online", http.StatusConflict)
+		return
+	}
+
+	commandID, err := newCommandID()
+	if err != nil {
+		s.auditCurrentUser(r, "server.console", server.NodeID, serverID, "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.nodeManager.CreateCommand(commandID, server.NodeID, "server.console", server.Name); err != nil {
+		s.auditCurrentUser(r, "server.console", server.NodeID, serverID, commandID, false, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	cmd := &proto.PanelCommand{
+		CommandId: commandID,
+		Action: &proto.PanelCommand_ConsoleCommand{
+			ConsoleCommand: &proto.SendConsoleCommand{
+				Id:      server.ContainerID,
+				Command: req.Command,
+			},
+		},
+	}
+	if err := s.nodeManager.SendCommand(server.NodeID, cmd); err != nil {
+		s.auditCurrentUser(r, "server.console", server.NodeID, serverID, commandID, false, err.Error())
+		_ = s.nodeManager.CompleteCommand(commandID, false, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.auditCurrentUser(r, "server.console", server.NodeID, serverID, commandID, true, "")
+	writeJSON(w, http.StatusAccepted, commandResponse{CommandID: commandID, ServerID: server.ID})
 }
 
 func (s *Server) handleRemoveServer(w http.ResponseWriter, r *http.Request) {
