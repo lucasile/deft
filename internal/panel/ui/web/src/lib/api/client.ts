@@ -318,7 +318,7 @@ export const panel = {
 		return response.json();
 	},
 
-	serverAction: async (serverID: string, action: 'start' | 'stop' | 'remove'): Promise<CommandResponse> => {
+	serverAction: async (serverID: string, action: 'start' | 'stop' | 'restart' | 'remove'): Promise<CommandResponse> => {
 		const response = await apiFetch(`/api/servers/${serverID}/${action}`, {
 			method: 'POST',
 		});

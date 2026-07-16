@@ -66,6 +66,7 @@ message PanelCommand {
     GetContainerLogs logs = 7;
     FollowContainerLogs follow_logs = 8;
     CancelLogStream cancel_logs = 9;
+    RestartContainer restart = 10;
   }
 }
 
@@ -106,6 +107,10 @@ message StopContainer {
 }
 
 message RemoveContainer {
+  string id = 1;
+}
+
+message RestartContainer {
   string id = 1;
 }
 

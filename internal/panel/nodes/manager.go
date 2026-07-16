@@ -781,6 +781,8 @@ func finalContainerStatus(action string) string {
 		return "created"
 	case "container.start":
 		return "running"
+	case "container.restart":
+		return "running"
 	case "container.stop":
 		return "stopped"
 	default:

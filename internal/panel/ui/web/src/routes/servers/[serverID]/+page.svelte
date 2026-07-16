@@ -34,6 +34,7 @@
 	const canAct = $derived(Boolean(hasLinkedContainer && !actionPending));
 	const canStart = $derived(Boolean(canAct && displayStatus !== 'running'));
 	const canStop = $derived(Boolean(canAct && displayStatus === 'running'));
+	const canRestart = $derived(Boolean(canAct && displayStatus === 'running'));
 	const canRemove = $derived(Boolean(canAct));
 
 	onMount(() => {
@@ -89,14 +90,14 @@
 		}
 	};
 
-	const runServerAction = async (action: 'start' | 'stop' | 'remove') => {
+	const runServerAction = async (action: 'start' | 'stop' | 'restart' | 'remove') => {
 		if (!server || !canAct) return;
 		busy = true;
 		error = null;
 		const previousStatus = localServerStatus;
 		localServerStatus = requestedStatus(action);
 		try {
-			if (action === 'start') {
+			if (action === 'start' || action === 'restart') {
 				autoStartedLogForStatus = '';
 			}
 			const response = await panel.serverAction(server.id, action);
@@ -117,9 +118,10 @@
 		}
 	};
 
-	const requestedStatus = (action: 'start' | 'stop' | 'remove') => {
+	const requestedStatus = (action: 'start' | 'stop' | 'restart' | 'remove') => {
 		if (action === 'start') return 'start_requested';
 		if (action === 'stop') return 'stop_requested';
+		if (action === 'restart') return 'restart_requested';
 		return 'remove_requested';
 	};
 
@@ -336,10 +338,14 @@
 							<Badge variant={statusVariant(displayStatus)}>{displayStatus || 'unknown'}</Badge>
 						</div>
 
-						<div class="grid grid-cols-3 gap-2">
+						<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
 							<Button type="button" variant="outline" disabled={busy || !canStart} onclick={() => runServerAction('start')}>
 								<Play size={15} />
 								Start
+							</Button>
+							<Button type="button" variant="outline" disabled={busy || !canRestart} onclick={() => runServerAction('restart')}>
+								<RefreshCw size={15} />
+								Restart
 							</Button>
 							<Button type="button" variant="outline" disabled={busy || !canStop} onclick={() => runServerAction('stop')}>
 								<Square size={15} />

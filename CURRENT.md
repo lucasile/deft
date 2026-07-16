@@ -48,6 +48,7 @@
 - [x] Started moving normal management onto the server detail page: linked-container start/stop/remove controls, live logs, status reconciliation, and destructive remove confirmation now live on `/servers/{serverID}`.
 - [x] Moved Docker-backed desired config off the normal server management page to `/servers/{serverID}/config`, with an advanced link to the backing container.
 - [x] Added server-level action APIs: `POST /api/servers/{serverID}/start`, `/stop`, and `/remove`. The server page now calls these endpoints instead of direct container action APIs.
+- [x] Added real server restart support: protobuf `RestartContainer`, agent Docker restart dispatch, `POST /api/servers/{serverID}/restart`, and a server page Restart action.
 - [x] Removed/removing/missing servers are hidden from the default dashboard server list. Inventory sync no longer rewrites a `remove_requested` server to `missing` while removal is settling.
 
 ## Current Task
@@ -82,6 +83,7 @@ The panel should:
 - Server detail pages should live-update from panel events anywhere status or linked container state can change.
 - Until dedicated server action APIs exist, server page actions may call the linked container APIs under the hood. Keep that implementation detail out of the primary UX.
 - Server action APIs are the normal UI boundary. They may still dispatch linked container commands internally, but frontend server management should call `/api/servers/{serverID}/...`.
+- Restart is a typed panel-to-agent command, not a UI stop/start sequence.
 - Server removal should disappear from the normal dashboard immediately. Command history remains the audit trail for success/failure.
 - Keep operational server management separate from Docker/container configuration. Config belongs on a dedicated settings/config page or advanced container page, not the main management page.
 - Advanced container pages should expose the owning server's config page when the container is linked to a server.

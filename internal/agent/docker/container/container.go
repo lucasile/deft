@@ -109,3 +109,12 @@ func Remove(ctx context.Context, c *docker.Client, id string) error {
 	log.Debug().Str("id", id).Msg("Container removed")
 	return nil
 }
+
+func Restart(ctx context.Context, c *docker.Client, id string) error {
+	timeout := 10
+	if err := c.ContainerRestart(ctx, id, container.StopOptions{Timeout: &timeout}); err != nil {
+		return fmt.Errorf("failed to restart container: %w", err)
+	}
+	log.Debug().Str("id", id).Msg("Container restarted")
+	return nil
+}

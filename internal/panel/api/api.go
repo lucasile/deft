@@ -88,6 +88,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/servers/{serverID}", s.requireAuth(s.handleGetServer))
 	mux.HandleFunc("POST /api/servers/{serverID}/start", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStartServer))))
 	mux.HandleFunc("POST /api/servers/{serverID}/stop", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStopServer))))
+	mux.HandleFunc("POST /api/servers/{serverID}/restart", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleRestartServer))))
 	mux.HandleFunc("POST /api/servers/{serverID}/remove", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleRemoveServer))))
 	mux.HandleFunc("GET /api/nodes/{nodeID}/containers", s.requireAuth(s.handleListContainers))
 	mux.HandleFunc("POST /api/nodes/{nodeID}/containers", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleCreateContainer))))
@@ -675,6 +676,17 @@ func (s *Server) handleStopServer(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 	}, "container.stop", "server.stop", "stop_requested")
+}
+
+func (s *Server) handleRestartServer(w http.ResponseWriter, r *http.Request) {
+	s.handleServerContainerCommand(w, r, func(commandID string, server servers.Server) *proto.PanelCommand {
+		return &proto.PanelCommand{
+			CommandId: commandID,
+			Action: &proto.PanelCommand_Restart{
+				Restart: &proto.RestartContainer{Id: server.ContainerID},
+			},
+		}
+	}, "container.restart", "server.restart", "restart_requested")
 }
 
 func (s *Server) handleRemoveServer(w http.ResponseWriter, r *http.Request) {
