@@ -1,6 +1,7 @@
 package nodes
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -199,6 +200,67 @@ func TestSyncContainersLinksServerByResourceID(t *testing.T) {
 	}
 	if containerID != "docker-container-id" || status != "running" {
 		t.Fatalf("server link = (%q, %q), want docker-container-id/running", containerID, status)
+	}
+}
+
+func TestSyncContainersDoesNotMarkRemovingServerMissing(t *testing.T) {
+	tempDir := t.TempDir()
+	database, err := db.Init(filepath.Join(tempDir, "panel.db"))
+	if err != nil {
+		t.Fatalf("init db: %v", err)
+	}
+	defer database.Close()
+
+	if _, err := database.Exec(
+		"INSERT INTO nodes (id, name, last_seen) VALUES (?, ?, ?)",
+		"node-a",
+		"Node A",
+		time.Now().Unix(),
+	); err != nil {
+		t.Fatalf("insert node: %v", err)
+	}
+	if _, err := database.Exec(
+		`INSERT INTO containers (id, node_id, name, image, status)
+		 VALUES (?, ?, ?, ?, ?)`,
+		"docker-container-id",
+		"node-a",
+		"minecraft-1",
+		"itzg/minecraft-server:latest",
+		"running",
+	); err != nil {
+		t.Fatalf("insert container: %v", err)
+	}
+	if _, err := database.Exec(
+		`INSERT INTO servers (id, name, node_id, container_id, image, status, desired_config_json, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"resource-a",
+		"minecraft-1",
+		"node-a",
+		"docker-container-id",
+		"itzg/minecraft-server:latest",
+		"remove_requested",
+		"{}",
+		time.Now().Unix(),
+		time.Now().Unix(),
+	); err != nil {
+		t.Fatalf("insert server: %v", err)
+	}
+
+	manager := NewManager(database, nil, false)
+	if err := manager.SyncContainers("node-a", nil); err != nil {
+		t.Fatalf("sync containers: %v", err)
+	}
+
+	var status string
+	var containerID sql.NullString
+	if err := database.QueryRow("SELECT container_id, status FROM servers WHERE id = ?", "resource-a").Scan(&containerID, &status); err != nil {
+		t.Fatalf("load server: %v", err)
+	}
+	if status != "remove_requested" {
+		t.Fatalf("status = %q, want remove_requested", status)
+	}
+	if containerID.Valid {
+		t.Fatalf("container_id = %q, want null after stale container deletion", containerID.String)
 	}
 }
 

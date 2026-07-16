@@ -492,7 +492,7 @@ func (m *Manager) SyncContainers(nodeID string, inventory []*proto.ContainerSumm
 		if _, err := tx.Exec(
 			`UPDATE servers
 			 SET container_id = NULL, status = ?, updated_at = ?
-			 WHERE node_id = ? AND container_id IS NOT NULL`,
+			 WHERE node_id = ? AND container_id IS NOT NULL AND status NOT IN ('remove_requested', 'removed')`,
 			"missing",
 			time.Now().Unix(),
 			nodeID,
@@ -516,7 +516,7 @@ func (m *Manager) SyncContainers(nodeID string, inventory []*proto.ContainerSumm
 		if _, err := tx.Exec(
 			`UPDATE servers
 			 SET container_id = NULL, status = ?, updated_at = ?
-			 WHERE node_id = ? AND container_id IS NOT NULL AND container_id NOT IN (`+placeholders+`)`,
+			 WHERE node_id = ? AND container_id IS NOT NULL AND status NOT IN ('remove_requested', 'removed') AND container_id NOT IN (`+placeholders+`)`,
 			append([]any{"missing", time.Now().Unix()}, args...)...,
 		); err != nil {
 			return fmt.Errorf("failed to mark missing server containers: %w", err)

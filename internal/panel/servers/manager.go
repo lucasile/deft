@@ -73,6 +73,7 @@ func (m *Manager) List() ([]Server, error) {
 	rows, err := m.db.Query(
 		`SELECT id, name, node_id, container_id, image, status, desired_config_json, created_at, updated_at
 		 FROM servers
+		 WHERE status NOT IN ('remove_requested', 'removed', 'missing')
 		 ORDER BY created_at DESC, id DESC`,
 	)
 	if err != nil {
