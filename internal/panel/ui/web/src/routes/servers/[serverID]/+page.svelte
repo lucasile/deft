@@ -259,9 +259,20 @@
 			consoleError = cleanError(err);
 		} finally {
 			consoleBusy = false;
-			await tick();
-			consoleInputElement?.focus();
+			void refocusConsoleInput();
 		}
+	};
+
+	const refocusConsoleInput = async () => {
+		await tick();
+		window.requestAnimationFrame(() => {
+			window.setTimeout(() => {
+				if (!consoleInputElement || consoleInputElement.disabled) return;
+				consoleInputElement.focus({ preventScroll: true });
+				const cursorPosition = consoleInputElement.value.length;
+				consoleInputElement.setSelectionRange(cursorPosition, cursorPosition);
+			}, 0);
+		});
 	};
 
 	const loadConsoleCommandResult = async (commandID: string) => {
@@ -514,7 +525,11 @@
 								bind:value={consoleCommand}
 								disabled={consoleBusy || !canSendConsoleCommand}
 							/>
-							<Button type="submit" disabled={consoleBusy || !canSendConsoleCommand || !consoleCommand.trim()}>
+							<Button
+								type="submit"
+								disabled={consoleBusy || !canSendConsoleCommand || !consoleCommand.trim()}
+								onpointerdown={(event) => event.preventDefault()}
+							>
 								<Send size={15} />
 								{consoleBusy ? 'Sending...' : 'Send'}
 							</Button>
