@@ -58,6 +58,9 @@ func (h *Handler) HandleCommand(ctx context.Context, cmd *proto.PanelCommand) er
 			},
 			Env:          dockerEnv(a.Create.Env),
 			ExposedPorts: dockerExposedPorts(a.Create.Ports),
+			OpenStdin:    true,
+			StdinOnce:    false,
+			AttachStdin:  true,
 		}
 		hostConfig := &container.HostConfig{
 			PortBindings:  dockerPortBindings(a.Create.Ports),

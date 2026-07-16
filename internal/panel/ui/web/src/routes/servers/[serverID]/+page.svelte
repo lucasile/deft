@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { ArrowLeft, Box, Clock3, Container, LogOut, Play, RefreshCw, Send, Settings, Square, Trash2, ServerIcon, Terminal } from '@lucide/svelte';
+	import { ArrowLeft, Box, Clock3, Container, LogOut, Play, RefreshCw, Send, Settings, Square, Trash2, ServerIcon } from '@lucide/svelte';
 	import { auth, panel, type LogChunkPayload, type PanelEventPayload, type Server } from '$lib/api/client';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { Badge } from '$lib/components/ui/badge';
@@ -250,6 +250,8 @@
 			consoleCommandID = response.command_id;
 			consoleCommand = '';
 			consoleMessage = 'Command sent.';
+			logText += `${logText.endsWith('\n') || logText === '' ? '' : '\n'}> ${command}\n`;
+			void scrollLogsToBottom();
 		} catch (err) {
 			consoleCommandID = '';
 			consoleMessage = '';
@@ -470,11 +472,51 @@
 				<CardHeader class="flex flex-row items-center justify-between">
 					<div>
 						<CardTitle>Console</CardTitle>
-						<p class="text-sm text-zinc-400">{canSendConsoleCommand ? 'Ready' : 'Server must be online'}</p>
+						<p class="text-sm text-zinc-400">{logLive ? 'Live' : canSendConsoleCommand ? 'Ready' : 'Server must be online'}</p>
 					</div>
-					<Terminal size={18} class="text-zinc-500" />
+					<Button type="button" variant="outline" size="sm" disabled={busy || !server?.container_id} onclick={startLiveLogs}>
+						<RefreshCw size={14} />
+						Reconnect
+					</Button>
 				</CardHeader>
 				<CardContent class="space-y-3">
+					<div class="rounded-md border border-zinc-800 bg-zinc-950">
+						{#if !server?.container_id}
+							<p class="px-3 py-8 text-sm text-zinc-400">Console will appear after the server container is created.</p>
+						{:else if logLoading}
+							<p class="px-3 py-8 text-sm text-zinc-400">Connecting console...</p>
+						{:else if logError}
+							<div class="m-3 rounded-md border border-red-900/60 bg-red-950/60 px-3 py-2 text-sm text-red-200">
+								{logError}
+							</div>
+						{/if}
+
+						<pre
+							bind:this={logOutputElement}
+							class="max-h-[32rem] min-h-80 overflow-auto whitespace-pre-wrap p-3 text-xs text-zinc-300"
+						>{logText || (!logLoading && !logError && server?.container_id ? 'No console output yet.' : '')}</pre>
+
+						<form
+							class="grid gap-2 border-t border-zinc-800 p-3 sm:grid-cols-[1fr_auto]"
+							onsubmit={(event) => {
+								event.preventDefault();
+								void sendConsoleCommand();
+							}}
+						>
+							<input
+								class="h-10 w-full rounded-md border border-zinc-700 bg-black px-3 font-mono text-sm text-zinc-100 outline-none focus:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+								placeholder="say Hello from Deft"
+								maxlength="512"
+								bind:value={consoleCommand}
+								disabled={consoleBusy || !canSendConsoleCommand}
+							/>
+							<Button type="submit" disabled={consoleBusy || !canSendConsoleCommand || !consoleCommand.trim()}>
+								<Send size={15} />
+								{consoleBusy ? 'Sending...' : 'Send'}
+							</Button>
+						</form>
+					</div>
+
 					{#if consoleError}
 						<div class="rounded-md border border-red-900/60 bg-red-950/60 px-3 py-2 text-sm text-red-200">
 							{consoleError}
@@ -484,54 +526,6 @@
 						<div class="rounded-md border border-emerald-900/60 bg-emerald-950/50 px-3 py-2 text-sm text-emerald-200">
 							{consoleMessage}
 						</div>
-					{/if}
-					<form
-						class="grid gap-2 sm:grid-cols-[1fr_auto]"
-						onsubmit={(event) => {
-							event.preventDefault();
-							void sendConsoleCommand();
-						}}
-					>
-						<input
-							class="h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
-							placeholder="say Hello from Deft"
-							maxlength="512"
-							bind:value={consoleCommand}
-							disabled={consoleBusy || !canSendConsoleCommand}
-						/>
-						<Button type="submit" disabled={consoleBusy || !canSendConsoleCommand || !consoleCommand.trim()}>
-							<Send size={15} />
-							{consoleBusy ? 'Sending...' : 'Send'}
-						</Button>
-					</form>
-				</CardContent>
-			</Card>
-
-			<Card>
-				<CardHeader class="flex flex-row items-center justify-between">
-					<div>
-						<CardTitle>Logs</CardTitle>
-						<p class="text-sm text-zinc-400">{logLive ? 'Live' : 'Not connected'}</p>
-					</div>
-					<Button type="button" variant="outline" size="sm" disabled={busy || !server?.container_id} onclick={startLiveLogs}>
-						<RefreshCw size={14} />
-						Restart logs
-					</Button>
-				</CardHeader>
-				<CardContent>
-					{#if !server?.container_id}
-						<p class="py-8 text-sm text-zinc-400">Logs will appear after the server container is created.</p>
-					{:else if logLoading}
-						<p class="py-8 text-sm text-zinc-400">Loading recent logs...</p>
-					{:else if logError}
-						<div class="rounded-md border border-red-900/60 bg-red-950/60 px-3 py-2 text-sm text-red-200">
-							{logError}
-						</div>
-					{:else}
-						<pre
-							bind:this={logOutputElement}
-							class="max-h-[28rem] overflow-auto whitespace-pre-wrap rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-300"
-						>{logText || 'No logs available.'}</pre>
 					{/if}
 				</CardContent>
 			</Card>
