@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ArrowLeft, Box, Clock3, Container, LogOut, ServerIcon } from '@lucide/svelte';
-	import { auth, panel, type Server } from '$lib/api/client';
+	import { auth, panel, type PanelEventPayload, type Server } from '$lib/api/client';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
@@ -17,12 +17,26 @@
 
 	onMount(() => {
 		void loadServer();
+
+		const events = panel.events();
+		events.addEventListener('containers.changed', (event) => {
+			const payload = parseEventPayload(event);
+			if (!server || !payload.node_id || payload.node_id === server.node_id) {
+				void loadServer({ quiet: true });
+			}
+		});
+		events.addEventListener('command.updated', () => {
+			void loadServer({ quiet: true });
+		});
+		return () => events.close();
 	});
 
-	const loadServer = async () => {
+	const loadServer = async (options: { quiet?: boolean } = {}) => {
 		if (!serverID) return;
-		loading = true;
-		error = null;
+		if (!options.quiet) {
+			loading = true;
+			error = null;
+		}
 		try {
 			server = await panel.server(serverID);
 		} catch (err) {
@@ -31,7 +45,9 @@
 				goto('/login');
 			}
 		} finally {
-			loading = false;
+			if (!options.quiet) {
+				loading = false;
+			}
 		}
 	};
 
@@ -77,6 +93,16 @@
 
 	const cleanError = (err: unknown) => {
 		return err instanceof Error ? err.message.trim() : 'Request failed';
+	};
+
+	const parseEventPayload = (event: Event): PanelEventPayload => {
+		if (!(event instanceof MessageEvent) || typeof event.data !== 'string') return {};
+
+		try {
+			return JSON.parse(event.data) as PanelEventPayload;
+		} catch {
+			return {};
+		}
 	};
 </script>
 

@@ -43,6 +43,8 @@
 - [x] Made servers visible as the dashboard's primary list and added `/servers/{serverID}` for read-only server overview, desired config, node link, and linked container link.
 - [x] Added dashboard-first server creation UX: the dashboard has a visible `Create server` action, `/servers/new` lets users choose an online node when needed, and the node create flow now presents itself as server creation while still using container-backed implementation under the hood.
 - [x] Added history-aware back navigation for nested panel routes so shared entry points can return to the actual previous page while still falling back to the dashboard or parent route on direct loads.
+- [x] Server creation now gives visible in-flight feedback and redirects to the new server detail page. The create response returns `server_id` alongside `command_id`.
+- [x] Server detail pages now subscribe to panel events and refresh quietly, so create/start/stop status changes do not require manual page refreshes.
 
 ## Current Task
 **Implement Panel gRPC Server & REST API Core**
@@ -71,6 +73,9 @@ The panel should:
 - User-facing names are display names, not Docker container names. Docker names should be generated and treated as implementation details.
 - Servers are the intended product object. Containers are implementation detail/debug surface. New game, WireGuard, backups, and settings work should attach to servers first.
 - Dashboard entry points should say `server`, not `container`. Container routes may remain as internal/debug implementation paths until the server abstraction fully owns detail and action pages.
+- Successful server creation should land on the server detail page, not the node/container debug page.
+- Server detail should become the main management surface for actions, logs, config, health, and backups. Raw container pages can remain available as advanced/debug views, but should not be the normal user path.
+- Server detail pages should live-update from panel events anywhere status or linked container state can change.
 - Avoid duplicate primary CTAs in the same card empty state. If a card header already has the action, the empty state should explain what is missing, not repeat the same button.
 - Do not allow arbitrary host path mounts from the panel. Deft-created volume mounts should stay under `/var/lib/deft/volumes/...` unless a future explicit admin-only escape hatch is designed and audited.
 - One installed agent per machine is the intended model. Dev/test multi-agent runs must use unique `node_id` values.

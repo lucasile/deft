@@ -33,6 +33,7 @@ export type Command = {
 
 export type CommandResponse = {
 	command_id: string;
+	server_id?: string;
 };
 
 export type Container = {

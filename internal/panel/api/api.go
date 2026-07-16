@@ -121,6 +121,7 @@ type createContainerRequest struct {
 
 type commandResponse struct {
 	CommandID string `json:"command_id"`
+	ServerID  string `json:"server_id,omitempty"`
 }
 
 type portMappingRequest struct {
@@ -550,7 +551,7 @@ func (s *Server) handleStopNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.auditCurrentUser(r, "agent.stop", nodeID, nodeID, commandID, true, "")
-	writeJSON(w, http.StatusAccepted, commandResponse{CommandID: commandID})
+	writeJSON(w, http.StatusAccepted, commandResponse{CommandID: commandID, ServerID: commandID})
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {

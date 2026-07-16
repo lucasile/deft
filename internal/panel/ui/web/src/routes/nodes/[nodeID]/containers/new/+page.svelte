@@ -17,6 +17,7 @@
 	let nodes = $state<Node[]>([]);
 	let loading = $state(true);
 	let createSubmitting = $state(false);
+	let createMessage = $state('');
 	let error = $state<string | null>(null);
 
 	const nodeID = $derived(page.params.nodeID);
@@ -41,6 +42,7 @@
 				if (!form.valid || createSubmitting || !nodeID) return;
 
 				createSubmitting = true;
+				createMessage = 'Creating server...';
 				error = null;
 				try {
 					const config = parseCreateConfig(form.data);
@@ -52,9 +54,11 @@
 						image: form.data.image,
 						status: 'create_requested',
 					});
-					goto(`/nodes/${nodeID}`);
+					createMessage = 'Server created. Opening server page...';
+					await goto(`/servers/${response.server_id || response.command_id}`);
 				} catch (err) {
 					error = cleanError(err);
+					createMessage = '';
 				} finally {
 					createSubmitting = false;
 				}
@@ -154,6 +158,11 @@
 						{error}
 					</div>
 				{/if}
+				{#if createMessage}
+					<div class="mb-4 rounded-md border border-emerald-900/60 bg-emerald-950/50 px-3 py-2 text-sm text-emerald-200">
+						{createMessage}
+					</div>
+				{/if}
 				{#if loading}
 					<p class="text-sm text-zinc-400">Loading agent...</p>
 				{:else if !selectedNode}
@@ -170,6 +179,7 @@
 									name="name"
 									bind:value={$createForm.name}
 									autocomplete="off"
+									disabled={createSubmitting}
 									aria-invalid={$createErrors.name ? 'true' : undefined}
 									{...$createConstraints.name}
 								/>
@@ -184,6 +194,7 @@
 									name="image"
 									bind:value={$createForm.image}
 									autocomplete="off"
+									disabled={createSubmitting}
 									aria-invalid={$createErrors.image ? 'true' : undefined}
 									{...$createConstraints.image}
 								/>
@@ -201,6 +212,7 @@
 								bind:value={$createForm.ports}
 								class="mt-2 min-h-20 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
 								placeholder="25565:25565/tcp"
+								disabled={createSubmitting}
 							></textarea>
 							<p class="mt-1 text-xs text-zinc-500">One per line: host:container/protocol.</p>
 							{#if $createErrors.ports}
@@ -216,6 +228,7 @@
 								bind:value={$createForm.env}
 								class="mt-2 min-h-24 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
 								placeholder="EULA=TRUE"
+								disabled={createSubmitting}
 							></textarea>
 							<p class="mt-1 text-xs text-zinc-500">One per line: KEY=value.</p>
 							{#if $createErrors.env}
@@ -231,6 +244,7 @@
 								bind:value={$createForm.volumes}
 								class="mt-2 min-h-20 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
 								placeholder="/var/lib/deft/volumes/minecraft-1:/data"
+								disabled={createSubmitting}
 							></textarea>
 							<p class="mt-1 text-xs text-zinc-500">One per line: host:container[:ro]. Host path must be under /var/lib/deft/volumes.</p>
 							{#if $createErrors.volumes}
@@ -245,6 +259,7 @@
 								name="restart_policy"
 								bind:value={$createForm.restart_policy}
 								class="mt-2 h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-zinc-500"
+								disabled={createSubmitting}
 							>
 								<option value="no">No restart</option>
 								<option value="unless-stopped">Unless stopped</option>
@@ -257,10 +272,10 @@
 						</div>
 
 						<div class="flex justify-end gap-2">
-							<Button type="button" variant="outline" onclick={() => backOrGoto(`/nodes/${nodeID}`)}>Cancel</Button>
+							<Button type="button" variant="outline" disabled={createSubmitting} onclick={() => backOrGoto(`/nodes/${nodeID}`)}>Cancel</Button>
 							<Button type="submit" disabled={createSubmitting}>
 								<Plus size={16} />
-								Create server
+								{createSubmitting ? 'Creating...' : 'Create server'}
 							</Button>
 						</div>
 					</form>
