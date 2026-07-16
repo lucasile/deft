@@ -29,6 +29,11 @@
 - [x] Hardened API input parsing — body size limits, unknown JSON field rejection, and validation for node IDs, command IDs, container names/IDs, and image references.
 - [x] Built initial Svelte dashboard — node list, create/start/stop/remove controls, command status polling, and cookie/CSRF API client wiring.
 - [x] Adopted shadcn-style local Svelte UI components and Superforms SPA-mode validation for panel forms.
+- [x] Added authenticated Server-Sent Events for panel updates, starting with node changes and command completion invalidation.
+- [x] Added backend foundation for panel-local agent join flow: one-time join tokens, CSR signing, joined node cert metadata, and production cert/node identity checks.
+- [x] Added installer-driven agent join: installer can use either browser approval link flow or headless join token flow, generate local agent key/CSR, write certs/config, and start systemd service.
+- [x] Added join token manager foundation: list recent tokens, show active/used/expired/revoked state, and revoke unused tokens.
+- [x] Added local multi-agent dev helper: `make dev-agent NAME=<name> [TOKEN=<token>]` creates a clean isolated `.deft/dev-agents/<name>` config/certs directory and runs `deftd` in the foreground. If `TOKEN` is omitted, it creates a browser approval link against `PANEL_URL` or `http://localhost:3000`.
 
 ## Current Task
 **Implement Panel gRPC Server & REST API Core**
@@ -43,16 +48,25 @@ The panel should:
 1. User Authentication (JWT).
 2. SvelteKit UI Development (Dashboard, Node Management, Console).
 3. Agent Join Token flow (Bootstrap API).
+4. Node lifecycle controls: remove/archive offline nodes, disable/revoke joined nodes, and hide archived nodes from the default dashboard.
 
 
 ## Blockers / Notes
 - SvelteKit is UI-only for this architecture. Production API/security logic belongs in the Go panel unless the deployment model changes.
 - Frontend forms may use Superforms for UX/client validation, but Go API validation remains the security boundary.
 - Browser/UI -> Go REST API -> Go node manager -> gRPC stream -> agent -> Docker.
+- Browser live updates should use authenticated SSE invalidation events before adding polling. Use WebSockets only when the browser needs bidirectional streams such as console input.
 - Keep panel-to-agent operations typed and allowlisted through protobuf. Do not add arbitrary host command execution.
 - One installed agent per machine is the intended model. Dev/test multi-agent runs must use unique `node_id` values.
 - Production gRPC must use mTLS. Insecure gRPC is only for local development with `DEFT_DEV=true`.
+- Deft has no global panel authority. Each self-hosted panel is its own trust root and issues its own agent join tokens/certificates.
+- Production agent certs must include `deft:node:<node_id>` identity and match the stored node certificate fingerprint.
+- Agent private keys must be generated locally by the agent installer and never sent to the panel. Only CSRs are sent during join.
+- Keep both agent join UX paths: browser approval link for interactive installs, join token for headless automation.
+- Join tokens are short-lived and single-use; admins must be able to list recent token metadata and revoke unused tokens.
+- Join token manager displays at most 5 tokens. Revoked tokens remain visible briefly, then age out of the panel list.
+- Uninstalled agents should remain visible as offline nodes until an admin explicitly removes, archives, or disables them. Removal/revocation must be audited.
 - Dashboard is functional for the current backend core. It uses local shadcn-style components under `internal/panel/ui/web/src/lib/components/ui`. It still needs container listing, clearer empty/setup states, and production UI polish.
 
 ## Last Updated
-2026-07-09
+2026-07-15

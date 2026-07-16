@@ -111,10 +111,17 @@ deft/
 - Mutual TLS on all communication
 - Production panel startup must fail if gRPC TLS credentials cannot load. Insecure gRPC is only allowed with explicit `DEFT_DEV=true`.
 - In dev mode, panel listeners must default to loopback only (`127.0.0.1`). Requiring explicit `DEFT_HTTP_HOST`/`DEFT_GRPC_HOST` overrides prevents accidental insecure exposure.
+- Deft has no global panel authority. Each self-hosted panel is its own trust root and issues panel-local join tokens and agent certificates.
+- Agent join uses one-time, short-lived token hashes in SQLite. The agent should generate its private key locally, send a CSR, and receive a panel-signed certificate.
+- The installer may perform first-run agent join after installing binaries/service. It must support both browser approval link flow and headless join token flow. It must generate the agent private key locally, send only a CSR to the panel, write `/etc/deft/agent.json` and cert files, then start/restart `deft.service`.
+- Admins must be able to list recent join token metadata and revoke unused tokens. Raw token values are only shown immediately after creation; stored tokens stay hashed.
+- Production gRPC must verify that the client certificate identity (`deft:node:<node_id>`) matches the heartbeat `node_id` and the node's stored certificate fingerprint.
+- Uninstalled agents should remain visible as offline known nodes until an admin explicitly removes, archives, or disables them. Node removal/revocation must require auth, be audited, and should preserve audit history.
 - Self-hosted panel = zero Deft company access to nodes
 - SvelteKit is a static SPA in this repo. Do not put trusted production API/security logic in SvelteKit server routes unless the deployment architecture changes.
 - Browser/UI requests go to the Go REST API. The Go panel validates requests, enforces auth/authorization, records state, and sends typed gRPC `PanelCommand` messages to agents.
 - Superforms is allowed for panel form UX and client-side validation. Treat it as convenience only; the Go API remains the security boundary and must validate every mutation.
+- Browser live updates use authenticated Server-Sent Events from the Go panel for invalidation events such as `nodes.changed` and `command.updated`. Prefer SSE over polling for one-way panel updates; use WebSockets only for bidirectional features like consoles.
 - Never add a generic "run command" path from panel to agent. Add explicit protobuf messages and handler cases for each allowed operation.
 - The panel must not allow two live gRPC streams with the same `node_id`; duplicate active IDs are rejected.
 - Panel REST APIs require authentication. First-user registration is allowed only while the users table is empty; that user becomes `admin`.

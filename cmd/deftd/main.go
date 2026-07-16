@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"os"
 	"time"
 
@@ -16,11 +17,19 @@ func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	log.Info().Msg("Deft Daemon starting...")
+	defaultConfigPath := os.Getenv("DEFT_AGENT_CONFIG")
+	if defaultConfigPath == "" {
+		defaultConfigPath = "/etc/deft/agent.json"
+	}
+	configPath := flag.String("config", defaultConfigPath, "path to agent config JSON")
+	flag.Parse()
 
-	cfg, err := config.Load("/etc/deft/agent.json")
+	log.Info().Msg("Deft Daemon starting...")
+	log.Info().Str("path", *configPath).Msg("loading agent config")
+
+	cfg, err := config.Load(*configPath)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to load config from /etc/deft/agent.json")
+		log.Fatal().Err(err).Str("path", *configPath).Msg("failed to load agent config")
 	}
 
 	dockerClient, err := docker.NewClient()

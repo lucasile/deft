@@ -1,14 +1,18 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/lucasile/deft/internal/i18n"
 	"github.com/manifoldco/promptui"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
+
+var stdinReader = bufio.NewReader(os.Stdin)
 
 var rootCmd = &cobra.Command{
 	Use:           "deft",
@@ -117,13 +121,11 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 }
 
 func confirm(label string) bool {
-	prompt := promptui.Prompt{
-		Label:     label,
-		IsConfirm: true,
-	}
-	result, err := prompt.Run()
+	fmt.Printf("%s [y/N]: ", label)
+	result, err := stdinReader.ReadString('\n')
 	if err != nil {
 		return false
 	}
+	result = strings.TrimSpace(result)
 	return result == "y" || result == "Y"
 }

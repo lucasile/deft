@@ -1,7 +1,10 @@
 CREATE TABLE IF NOT EXISTS nodes (
     id TEXT PRIMARY KEY,
     name TEXT,
-    last_seen INTEGER
+    last_seen INTEGER,
+    cert_fingerprint TEXT,
+    cert_subject TEXT,
+    created_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS containers (
@@ -57,4 +60,36 @@ CREATE TABLE IF NOT EXISTS commands (
     created_at INTEGER NOT NULL,
     completed_at INTEGER,
     FOREIGN KEY(node_id) REFERENCES nodes(id)
+);
+
+CREATE TABLE IF NOT EXISTS join_tokens (
+    id TEXT PRIMARY KEY,
+    token_hash TEXT NOT NULL UNIQUE,
+    node_name TEXT,
+    created_by TEXT,
+    used_by_node_id TEXT,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    used_at INTEGER,
+    revoked_at INTEGER,
+    FOREIGN KEY(created_by) REFERENCES users(id),
+    FOREIGN KEY(used_by_node_id) REFERENCES nodes(id)
+);
+
+CREATE TABLE IF NOT EXISTS join_requests (
+    id TEXT PRIMARY KEY,
+    secret_hash TEXT NOT NULL UNIQUE,
+    verification_code TEXT NOT NULL,
+    node_name TEXT,
+    csr_pem TEXT NOT NULL,
+    ca_cert_pem TEXT,
+    cert_pem TEXT,
+    approved_by TEXT,
+    approved_node_id TEXT,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    approved_at INTEGER,
+    denied_at INTEGER,
+    FOREIGN KEY(approved_by) REFERENCES users(id),
+    FOREIGN KEY(approved_node_id) REFERENCES nodes(id)
 );

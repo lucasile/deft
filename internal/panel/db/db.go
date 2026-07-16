@@ -75,6 +75,35 @@ func applyMigrations(db *sql.DB) error {
 		}
 	}
 
+	for _, column := range []struct {
+		name       string
+		definition string
+	}{
+		{name: "cert_fingerprint", definition: "ALTER TABLE nodes ADD COLUMN cert_fingerprint TEXT"},
+		{name: "cert_subject", definition: "ALTER TABLE nodes ADD COLUMN cert_subject TEXT"},
+		{name: "created_at", definition: "ALTER TABLE nodes ADD COLUMN created_at INTEGER"},
+	} {
+		exists, err := hasColumn(db, "nodes", column.name)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			if _, err := db.Exec(column.definition); err != nil {
+				return fmt.Errorf("failed to add nodes.%s: %w", column.name, err)
+			}
+		}
+	}
+
+	hasJoinTokenRevokedAt, err := hasColumn(db, "join_tokens", "revoked_at")
+	if err != nil {
+		return err
+	}
+	if !hasJoinTokenRevokedAt {
+		if _, err := db.Exec("ALTER TABLE join_tokens ADD COLUMN revoked_at INTEGER"); err != nil {
+			return fmt.Errorf("failed to add join_tokens.revoked_at: %w", err)
+		}
+	}
+
 	return nil
 }
 

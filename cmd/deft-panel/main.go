@@ -12,6 +12,8 @@ import (
 	"github.com/lucasile/deft/internal/panel/audit"
 	"github.com/lucasile/deft/internal/panel/auth"
 	"github.com/lucasile/deft/internal/panel/db"
+	"github.com/lucasile/deft/internal/panel/events"
+	"github.com/lucasile/deft/internal/panel/join"
 	"github.com/lucasile/deft/internal/panel/nodes"
 	"github.com/lucasile/deft/internal/panel/ui"
 	"github.com/lucasile/deft/internal/proto"
@@ -37,8 +39,10 @@ func main() {
 	httpPort := getEnv("DEFT_HTTP_PORT", "3000")
 	dbPath := getEnv("DEFT_DB_PATH", "panel.db")
 	caPath := getEnv("DEFT_CA_PATH", "/etc/deft/certs/ca.crt")
+	caKeyPath := getEnv("DEFT_CA_KEY_PATH", "/etc/deft/certs/ca.key")
 	certPath := getEnv("DEFT_CERT_PATH", "/etc/deft/certs/panel.crt")
 	keyPath := getEnv("DEFT_KEY_PATH", "/etc/deft/certs/panel.key")
+	publicGrpcAddr := getEnv("DEFT_PUBLIC_GRPC_ADDR", net.JoinHostPort(grpcHost, grpcPort))
 	secureCookies := !getEnvBool("DEFT_INSECURE_COOKIES", false)
 
 	database, err := db.Init(dbPath)
@@ -47,13 +51,21 @@ func main() {
 	}
 	defer database.Close()
 
-	nodeManager := nodes.NewManager(database)
+	eventHub := events.NewHub()
+	nodeManager := nodes.NewManager(database, eventHub, !isDev)
 	authService := auth.NewService(database)
 	auditLogger := audit.NewLogger(database)
+	joinService := join.NewService(database, caPath, caKeyPath, publicGrpcAddr)
+	if err := joinService.CheckCA(); err != nil {
+		if !isDev {
+			log.Fatal().Err(err).Msg("agent join CA is required")
+		}
+		log.Warn().Err(err).Msg("DEFT_DEV=true: agent join will fail until CA cert/key are configured")
+	}
 
 	go startGrpcServer(grpcHost, grpcPort, caPath, certPath, keyPath, nodeManager, isDev)
 
-	apiServer := api.NewServer(nodeManager, authService, auditLogger, secureCookies)
+	apiServer := api.NewServer(nodeManager, authService, auditLogger, eventHub, joinService, secureCookies)
 	runServer(httpHost, httpPort, apiServer, isDev)
 }
 
@@ -94,7 +106,7 @@ func runServer(host, port string, apiServer *api.Server, isDev bool) {
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get ui assets")
 	}
-	mux.Handle("/", http.FileServer(http.FS(publicFS)))
+	mux.Handle("/", ui.Handler(publicFS))
 
 	addr := net.JoinHostPort(host, port)
 	log.Info().Str("addr", addr).Bool("dev", isDev).Msg("Deft Panel (UI & API) starting")

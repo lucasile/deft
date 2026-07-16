@@ -1,15 +1,28 @@
 package nodes
 
 import (
+	"crypto/sha256"
+	"crypto/x509"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/lucasile/deft/internal/panel/db"
+	"github.com/lucasile/deft/internal/panel/events"
 	"github.com/lucasile/deft/internal/proto"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
+)
+
+const (
+	EventNodesChanged      = "nodes.changed"
+	EventCommandUpdated    = "command.updated"
+	EventContainersChanged = "containers.changed"
 )
 
 type NodeConnection struct {
@@ -36,17 +49,29 @@ type Command struct {
 	CompletedAt *int64 `json:"completed_at,omitempty"`
 }
 
-type Manager struct {
-	proto.UnimplementedAgentServiceServer
-	mu    sync.RWMutex
-	nodes map[string]*NodeConnection
-	db    *db.DB
+type Container struct {
+	ID     string `json:"id"`
+	NodeID string `json:"node_id"`
+	Name   string `json:"name,omitempty"`
+	Image  string `json:"image,omitempty"`
+	Status string `json:"status,omitempty"`
 }
 
-func NewManager(database *db.DB) *Manager {
+type Manager struct {
+	proto.UnimplementedAgentServiceServer
+	mu                  sync.RWMutex
+	nodes               map[string]*NodeConnection
+	db                  *db.DB
+	events              *events.Hub
+	requireCertIdentity bool
+}
+
+func NewManager(database *db.DB, eventHub *events.Hub, requireCertIdentity bool) *Manager {
 	return &Manager{
-		nodes: make(map[string]*NodeConnection),
-		db:    database,
+		nodes:               make(map[string]*NodeConnection),
+		db:                  database,
+		events:              eventHub,
+		requireCertIdentity: requireCertIdentity,
 	}
 }
 
@@ -65,6 +90,12 @@ func (m *Manager) Connect(stream proto.AgentService_ConnectServer) error {
 	if nodeID == "" {
 		return fmt.Errorf("node id is required")
 	}
+	if m.requireCertIdentity {
+		if err := m.verifyNodeCertificate(stream, nodeID); err != nil {
+			log.Warn().Err(err).Str("node_id", nodeID).Msg("rejected agent certificate")
+			return err
+		}
+	}
 
 	m.mu.Lock()
 	if _, exists := m.nodes[nodeID]; exists {
@@ -81,15 +112,23 @@ func (m *Manager) Connect(stream proto.AgentService_ConnectServer) error {
 	m.nodes[nodeID] = conn
 	m.mu.Unlock()
 	log.Info().Str("node_id", nodeID).Msg("Agent connected")
+	m.publish(EventNodesChanged, map[string]string{"node_id": nodeID})
 
 	defer func() {
 		m.mu.Lock()
 		delete(m.nodes, nodeID)
 		m.mu.Unlock()
 		log.Info().Str("node_id", nodeID).Msg("Agent disconnected")
+		m.publish(EventNodesChanged, map[string]string{"node_id": nodeID})
 	}()
 
-	_, err = m.db.Exec("INSERT OR REPLACE INTO nodes (id, last_seen) VALUES (?, ?)", nodeID, time.Now().Unix())
+	_, err = m.db.Exec(
+		`INSERT INTO nodes (id, last_seen)
+		 VALUES (?, ?)
+		 ON CONFLICT(id) DO UPDATE SET last_seen = excluded.last_seen`,
+		nodeID,
+		time.Now().Unix(),
+	)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to update node in db")
 	}
@@ -105,6 +144,7 @@ func (m *Manager) Connect(stream proto.AgentService_ConnectServer) error {
 			if err := m.CompleteCommand(res.CommandId, res.Success, res.Message); err != nil {
 				log.Error().Err(err).Str("command_id", res.CommandId).Msg("failed to update command result")
 			}
+			m.publish(EventCommandUpdated, map[string]string{"command_id": res.CommandId})
 		}
 
 		if _, err := m.db.Exec("UPDATE nodes SET last_seen = ? WHERE id = ?", time.Now().Unix(), nodeID); err != nil {
@@ -123,6 +163,67 @@ func (m *Manager) SendCommand(nodeID string, cmd *proto.PanelCommand) error {
 	}
 
 	return node.stream.Send(cmd)
+}
+
+func (m *Manager) verifyNodeCertificate(stream proto.AgentService_ConnectServer, nodeID string) error {
+	cert, err := peerCertificate(stream)
+	if err != nil {
+		return err
+	}
+
+	certNodeID := nodeIDFromCertificate(cert)
+	if certNodeID == "" {
+		return fmt.Errorf("client certificate is missing deft node identity")
+	}
+	if certNodeID != nodeID {
+		return fmt.Errorf("client certificate node identity does not match requested node id")
+	}
+
+	fingerprintBytes := sha256.Sum256(cert.Raw)
+	fingerprint := hex.EncodeToString(fingerprintBytes[:])
+
+	var storedFingerprint sql.NullString
+	err = m.db.QueryRow(
+		"SELECT cert_fingerprint FROM nodes WHERE id = ?",
+		nodeID,
+	).Scan(&storedFingerprint)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("node %s is not joined", nodeID)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to load node certificate fingerprint: %w", err)
+	}
+	if !storedFingerprint.Valid || storedFingerprint.String != fingerprint {
+		return fmt.Errorf("client certificate fingerprint does not match joined node")
+	}
+
+	return nil
+}
+
+func peerCertificate(stream proto.AgentService_ConnectServer) (*x509.Certificate, error) {
+	p, ok := peer.FromContext(stream.Context())
+	if !ok {
+		return nil, fmt.Errorf("missing gRPC peer")
+	}
+	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
+	if !ok {
+		return nil, fmt.Errorf("missing TLS peer info")
+	}
+	if len(tlsInfo.State.PeerCertificates) == 0 {
+		return nil, fmt.Errorf("missing client certificate")
+	}
+	return tlsInfo.State.PeerCertificates[0], nil
+}
+
+func nodeIDFromCertificate(cert *x509.Certificate) string {
+	for _, uri := range cert.URIs {
+		if uri.Scheme == "deft" && uri.Opaque != "" {
+			if value, ok := strings.CutPrefix(uri.Opaque, "node:"); ok {
+				return value
+			}
+		}
+	}
+	return ""
 }
 
 func (m *Manager) ListNodes() ([]Node, error) {
@@ -178,7 +279,14 @@ func (m *Manager) UpsertContainer(nodeID, containerID, name, image, status strin
 		return fmt.Errorf("failed to upsert container: %w", err)
 	}
 
+	m.publish(EventContainersChanged, map[string]string{"node_id": nodeID, "container_id": containerID})
 	return nil
+}
+
+func (m *Manager) publish(name string, data any) {
+	if m.events != nil {
+		m.events.Publish(name, data)
+	}
 }
 
 func (m *Manager) UpdateContainerStatus(nodeID, containerID, status string) error {
@@ -196,7 +304,48 @@ func (m *Manager) UpdateContainerStatus(nodeID, containerID, status string) erro
 		return fmt.Errorf("failed to update container status: %w", err)
 	}
 
+	m.publish(EventContainersChanged, map[string]string{"node_id": nodeID, "container_id": containerID})
 	return nil
+}
+
+func (m *Manager) ListContainers(nodeID string) ([]Container, error) {
+	rows, err := m.db.Query(
+		`SELECT id, node_id, name, image, status
+		 FROM containers
+		 WHERE node_id = ?
+		 ORDER BY name, id`,
+		nodeID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list containers: %w", err)
+	}
+	defer rows.Close()
+
+	containers := []Container{}
+	for rows.Next() {
+		var container Container
+		var name sql.NullString
+		var image sql.NullString
+		var status sql.NullString
+		if err := rows.Scan(&container.ID, &container.NodeID, &name, &image, &status); err != nil {
+			return nil, fmt.Errorf("failed to scan container: %w", err)
+		}
+		if name.Valid {
+			container.Name = name.String
+		}
+		if image.Valid {
+			container.Image = image.String
+		}
+		if status.Valid {
+			container.Status = status.String
+		}
+		containers = append(containers, container)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read containers: %w", err)
+	}
+
+	return containers, nil
 }
 
 func (m *Manager) CreateCommand(commandID, nodeID, action, targetID string) error {

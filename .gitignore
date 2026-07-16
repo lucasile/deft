@@ -10,6 +10,7 @@ go.work.sum
 # Temporary installation files
 deft.tmp
 deft
+.deft/
 
 # Gemini
 .gemini/checkpoint*

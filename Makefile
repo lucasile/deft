@@ -1,6 +1,6 @@
 # Makefile for Deft - AI Server Manager
 
-.PHONY: all agent-cli daemon installer panel docker-panel clean test tidy check-root
+.PHONY: all agent-cli daemon installer panel docker-panel dev-agent clean test tidy check-root
 
 # Go settings
 GO := go
@@ -49,6 +49,15 @@ panel: $(BIN_DIR)
 docker-panel: check-root
 	@echo "Building Panel Docker Image (requires sudo)..."
 	docker build -t ghcr.io/lucasile/deft-panel:latest -f panel/Dockerfile .
+
+dev-agent:
+	@if [ -z "$(NAME)" ]; then \
+		echo "Usage: make dev-agent NAME=test-agent [TOKEN=<64-char-join-token>]"; \
+		echo "Optional: PANEL_URL=http://localhost:3000"; \
+		echo "If TOKEN is omitted, a browser approval link is created."; \
+		exit 1; \
+	fi
+	PANEL_URL="$(PANEL_URL)" ./scripts/run-dev-agent.sh "$(NAME)" "$(TOKEN)"
 
 clean:
 	@echo "Cleaning up..."

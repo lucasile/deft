@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/lucasile/deft/internal/panel/audit"
 	"github.com/lucasile/deft/internal/panel/auth"
+	"github.com/lucasile/deft/internal/panel/events"
+	"github.com/lucasile/deft/internal/panel/join"
 	"github.com/lucasile/deft/internal/panel/nodes"
 	"github.com/lucasile/deft/internal/proto"
 	"github.com/rs/zerolog/log"
@@ -20,16 +23,27 @@ type Server struct {
 	nodeManager   *nodes.Manager
 	auth          *auth.Service
 	audit         *audit.Logger
+	events        *events.Hub
+	join          *join.Service
 	secureCookies bool
 	authLimiter   *rateLimiter
 	actionLimiter *rateLimiter
 }
 
-func NewServer(nodeManager *nodes.Manager, authService *auth.Service, auditLogger *audit.Logger, secureCookies bool) *Server {
+func NewServer(
+	nodeManager *nodes.Manager,
+	authService *auth.Service,
+	auditLogger *audit.Logger,
+	eventHub *events.Hub,
+	joinService *join.Service,
+	secureCookies bool,
+) *Server {
 	return &Server{
 		nodeManager:   nodeManager,
 		auth:          authService,
 		audit:         auditLogger,
+		events:        eventHub,
+		join:          joinService,
 		secureCookies: secureCookies,
 		authLimiter:   newRateLimiter(5, time.Minute),
 		actionLimiter: newRateLimiter(60, time.Minute),
@@ -41,8 +55,18 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/login", s.rateLimitAuth(s.handleLogin))
 	mux.HandleFunc("GET /api/auth/csrf", s.requireAuth(s.handleCSRF))
 	mux.HandleFunc("POST /api/auth/logout", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleLogout))))
+	mux.HandleFunc("GET /api/agent/join-tokens", s.requireAuth(s.handleListJoinTokens))
+	mux.HandleFunc("POST /api/agent/join-tokens", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleCreateJoinToken))))
+	mux.HandleFunc("DELETE /api/agent/join-tokens/{tokenID}", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleRevokeJoinToken))))
+	mux.HandleFunc("POST /api/agent/join", s.rateLimitAuth(s.handleAgentJoin))
+	mux.HandleFunc("POST /api/agent/join-requests", s.rateLimitAuth(s.handleCreateJoinRequest))
+	mux.HandleFunc("GET /api/agent/join-requests/{requestID}", s.rateLimitAction(s.handleJoinRequestStatus))
+	mux.HandleFunc("GET /api/agent/join-requests/{requestID}/review", s.requireAuth(s.handleReviewJoinRequest))
+	mux.HandleFunc("POST /api/agent/join-requests/{requestID}/approve", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleApproveJoinRequest))))
 	mux.HandleFunc("GET /api/nodes", s.requireAuth(s.handleListNodes))
+	mux.HandleFunc("GET /api/events", s.requireAuth(s.handleEvents))
 	mux.HandleFunc("GET /api/commands/{commandID}", s.requireAuth(s.handleGetCommand))
+	mux.HandleFunc("GET /api/nodes/{nodeID}/containers", s.requireAuth(s.handleListContainers))
 	mux.HandleFunc("POST /api/nodes/{nodeID}/containers", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleCreateContainer))))
 	mux.HandleFunc("POST /api/nodes/{nodeID}/containers/{containerID}/start", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStartContainer))))
 	mux.HandleFunc("POST /api/nodes/{nodeID}/containers/{containerID}/stop", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStopContainer))))
@@ -70,6 +94,21 @@ type createContainerRequest struct {
 
 type commandResponse struct {
 	CommandID string `json:"command_id"`
+}
+
+type createJoinTokenRequest struct {
+	NodeName string `json:"node_name"`
+}
+
+type agentJoinRequest struct {
+	NodeName string `json:"node_name"`
+	CSRPem   string `json:"csr_pem"`
+}
+
+type createJoinRequestRequest struct {
+	NodeName string `json:"node_name"`
+	CSRPem   string `json:"csr_pem"`
+	PanelURL string `json:"panel_url"`
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +196,245 @@ func (s *Server) handleCSRF(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, csrfResponse{CSRFToken: csrfToken})
 }
 
+func (s *Server) handleCreateJoinToken(w http.ResponseWriter, r *http.Request) {
+	var req createJoinTokenRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		s.auditCurrentUser(r, "agent.join_token.create", "", "", "", false, "invalid json body")
+		http.Error(w, "invalid json body", http.StatusBadRequest)
+		return
+	}
+
+	req.NodeName = strings.TrimSpace(req.NodeName)
+	if req.NodeName != "" {
+		if err := validateNodeName(req.NodeName); err != nil {
+			s.auditCurrentUser(r, "agent.join_token.create", "", req.NodeName, "", false, err.Error())
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	user, _ := auth.UserFromContext(r.Context())
+	if err := s.join.CheckCA(); err != nil {
+		s.auditCurrentUser(r, "agent.join_token.create", "", req.NodeName, "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	token, err := s.join.CreateToken(user.ID, req.NodeName)
+	if err != nil {
+		s.auditCurrentUser(r, "agent.join_token.create", "", req.NodeName, "", false, err.Error())
+		status := http.StatusInternalServerError
+		if errors.Is(err, join.ErrActiveTokenLimit) {
+			status = http.StatusTooManyRequests
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+
+	s.auditCurrentUser(r, "agent.join_token.create", "", req.NodeName, "", true, "")
+	writeJSON(w, http.StatusCreated, token)
+}
+
+func (s *Server) handleListJoinTokens(w http.ResponseWriter, r *http.Request) {
+	tokens, err := s.join.ListTokens()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, tokens)
+}
+
+func (s *Server) handleRevokeJoinToken(w http.ResponseWriter, r *http.Request) {
+	tokenID := strings.TrimSpace(r.PathValue("tokenID"))
+	if err := validateJoinTokenID(tokenID); err != nil {
+		s.auditCurrentUser(r, "agent.join_token.revoke", "", tokenID, "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := s.join.RevokeToken(tokenID); err != nil {
+		s.auditCurrentUser(r, "agent.join_token.revoke", "", tokenID, "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	s.auditCurrentUser(r, "agent.join_token.revoke", "", tokenID, "", true, "")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleAgentJoin(w http.ResponseWriter, r *http.Request) {
+	var req agentJoinRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		s.recordAudit(r, audit.Event{
+			Action:  "agent.join",
+			Success: false,
+			Message: "invalid json body",
+		})
+		http.Error(w, "invalid json body", http.StatusBadRequest)
+		return
+	}
+
+	req.NodeName = strings.TrimSpace(req.NodeName)
+	if req.NodeName != "" {
+		if err := validateNodeName(req.NodeName); err != nil {
+			s.recordAudit(r, audit.Event{
+				Action:   "agent.join",
+				TargetID: req.NodeName,
+				Success:  false,
+				Message:  err.Error(),
+			})
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	result, err := s.join.Join(join.JoinRequest{
+		Token:    bearerToken(r),
+		NodeName: req.NodeName,
+		CSRPem:   req.CSRPem,
+	})
+	if err != nil {
+		s.recordAudit(r, audit.Event{
+			Action:   "agent.join",
+			TargetID: req.NodeName,
+			Success:  false,
+			Message:  err.Error(),
+		})
+		status := http.StatusForbidden
+		if join.IsCAUnavailable(err) {
+			status = http.StatusServiceUnavailable
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+
+	s.recordAudit(r, audit.Event{
+		Action:   "agent.join",
+		NodeID:   result.NodeID,
+		TargetID: req.NodeName,
+		Success:  true,
+	})
+	writeJSON(w, http.StatusCreated, result)
+}
+
+func (s *Server) handleCreateJoinRequest(w http.ResponseWriter, r *http.Request) {
+	var req createJoinRequestRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		s.recordAudit(r, audit.Event{
+			Action:  "agent.join_request.create",
+			Success: false,
+			Message: "invalid json body",
+		})
+		http.Error(w, "invalid json body", http.StatusBadRequest)
+		return
+	}
+
+	req.NodeName = strings.TrimSpace(req.NodeName)
+	if req.NodeName != "" {
+		if err := validateNodeName(req.NodeName); err != nil {
+			s.recordAudit(r, audit.Event{
+				Action:   "agent.join_request.create",
+				TargetID: req.NodeName,
+				Success:  false,
+				Message:  err.Error(),
+			})
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	panelURL := strings.TrimSpace(req.PanelURL)
+	if panelURL == "" {
+		panelURL = "https://" + r.Host
+	}
+	if err := s.join.CheckCA(); err != nil {
+		s.recordAudit(r, audit.Event{
+			Action:   "agent.join_request.create",
+			TargetID: req.NodeName,
+			Success:  false,
+			Message:  err.Error(),
+		})
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	result, err := s.join.CreateRequest(req.NodeName, req.CSRPem, panelURL)
+	if err != nil {
+		s.recordAudit(r, audit.Event{
+			Action:   "agent.join_request.create",
+			TargetID: req.NodeName,
+			Success:  false,
+			Message:  err.Error(),
+		})
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	s.recordAudit(r, audit.Event{
+		Action:   "agent.join_request.create",
+		TargetID: req.NodeName,
+		Success:  true,
+	})
+	writeJSON(w, http.StatusCreated, result)
+}
+
+func (s *Server) handleJoinRequestStatus(w http.ResponseWriter, r *http.Request) {
+	requestID := strings.TrimSpace(r.PathValue("requestID"))
+	if err := validateJoinRequestID(requestID); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	status, err := s.join.RequestStatus(requestID, bearerToken(r))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (s *Server) handleApproveJoinRequest(w http.ResponseWriter, r *http.Request) {
+	requestID := strings.TrimSpace(r.PathValue("requestID"))
+	if err := validateJoinRequestID(requestID); err != nil {
+		s.auditCurrentUser(r, "agent.join_request.approve", "", requestID, "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	user, _ := auth.UserFromContext(r.Context())
+	result, err := s.join.ApproveRequest(requestID, user.ID)
+	if err != nil {
+		s.auditCurrentUser(r, "agent.join_request.approve", "", requestID, "", false, err.Error())
+		status := http.StatusForbidden
+		if join.IsCAUnavailable(err) {
+			status = http.StatusServiceUnavailable
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+
+	s.auditCurrentUser(r, "agent.join_request.approve", result.NodeID, requestID, "", true, "")
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleReviewJoinRequest(w http.ResponseWriter, r *http.Request) {
+	requestID := strings.TrimSpace(r.PathValue("requestID"))
+	if err := validateJoinRequestID(requestID); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	review, err := s.join.ReviewRequest(requestID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, review)
+}
+
 func (s *Server) handleListNodes(w http.ResponseWriter, r *http.Request) {
 	nodeList, err := s.nodeManager.ListNodes()
 	if err != nil {
@@ -165,6 +443,42 @@ func (s *Server) handleListNodes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, nodeList)
+}
+
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	eventCh, unsubscribe := s.events.Subscribe()
+	defer unsubscribe()
+
+	if err := events.WriteSSE(w, events.Event{Name: "ready"}); err != nil {
+		return
+	}
+	flusher.Flush()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case event, ok := <-eventCh:
+			if !ok {
+				return
+			}
+			if err := events.WriteSSE(w, event); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
 }
 
 func (s *Server) handleGetCommand(w http.ResponseWriter, r *http.Request) {
@@ -181,6 +495,22 @@ func (s *Server) handleGetCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, command)
+}
+
+func (s *Server) handleListContainers(w http.ResponseWriter, r *http.Request) {
+	nodeID := strings.TrimSpace(r.PathValue("nodeID"))
+	if err := validateNodeID(nodeID); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	containers, err := s.nodeManager.ListContainers(nodeID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, containers)
 }
 
 func (s *Server) handleCreateContainer(w http.ResponseWriter, r *http.Request) {
@@ -450,4 +780,16 @@ func writeJSON(w http.ResponseWriter, status int, value interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func bearerToken(r *http.Request) string {
+	value := strings.TrimSpace(r.Header.Get("Authorization"))
+	if value == "" {
+		return ""
+	}
+	scheme, token, ok := strings.Cut(value, " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
+		return ""
+	}
+	return strings.TrimSpace(token)
 }

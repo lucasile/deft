@@ -13,8 +13,11 @@ const maxJSONBodyBytes = 32 * 1024
 
 var (
 	containerNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$`)
+	nodeNamePattern      = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,64}$`)
 	containerIDPattern   = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$`)
 	commandIDPattern     = regexp.MustCompile(`^[a-f0-9]{32}$`)
+	joinTokenIDPattern   = regexp.MustCompile(`^[a-f0-9]{32}$`)
+	joinRequestIDPattern = regexp.MustCompile(`^[a-f0-9]{32}$`)
 	imagePattern         = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._/:@-]{0,254}$`)
 )
 
@@ -40,6 +43,13 @@ func validateNodeID(value string) error {
 	return nil
 }
 
+func validateNodeName(value string) error {
+	if !nodeNamePattern.MatchString(value) {
+		return fmt.Errorf("node name must be 1-64 characters and cannot contain control characters")
+	}
+	return nil
+}
+
 func validateContainerName(value string) error {
 	if !containerNamePattern.MatchString(value) {
 		return fmt.Errorf("container name must be 1-64 characters and use only letters, numbers, dots, underscores, or dashes")
@@ -57,6 +67,20 @@ func validateContainerID(value string) error {
 func validateCommandID(value string) error {
 	if !commandIDPattern.MatchString(value) {
 		return fmt.Errorf("invalid command id")
+	}
+	return nil
+}
+
+func validateJoinRequestID(value string) error {
+	if !joinRequestIDPattern.MatchString(value) {
+		return fmt.Errorf("invalid join request id")
+	}
+	return nil
+}
+
+func validateJoinTokenID(value string) error {
+	if !joinTokenIDPattern.MatchString(value) {
+		return fmt.Errorf("invalid join token id")
 	}
 	return nil
 }
