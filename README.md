@@ -38,23 +38,9 @@ The agent connects *outward* to the panel — not the other way around. This mea
 
 ---
 
-## Supported games
-
-Minecraft · Rust · CS2 · Valheim · ARK · 7 Days to Die · Palworld · Terraria · Factorio · Project Zomboid · and more via community templates.
-
----
-
 ## Self-hosting
 
 Deft is designed to run entirely on your own infrastructure. The panel requires a single Linux VPS. Nodes can be any Linux server — bare metal, VPS, home server, or cloud VM.
-
-**Minimum requirements:**
-
-[!NOTE]
-| Component | Minimum |
-|-----------|---------|
-| Panel server | 1 vCPU, 512MB RAM, Ubuntu 22.04+ |
-| Node | 2 vCPU, 4GB RAM, Docker 24+ |
 
 ---
 
@@ -70,16 +56,6 @@ scripts/        Install scripts
 ```
 
 The panel and agent are both single static binaries with no runtime dependencies. The panel embeds the frontend — deploying Deft is copying one file and running it.
-
----
-
-## Security
-
-The agent runs with a hardcoded command allowlist — it cannot execute arbitrary commands on the host OS, access files outside its data directory, or escalate privileges. Every instruction from the panel is logged locally on the node.
-
-If you self-host the panel, we have zero access to your nodes. Zero.
-
-See [SECURITY.md](SECURITY.md) for the full threat model and how to report vulnerabilities.
 
 ---
 
