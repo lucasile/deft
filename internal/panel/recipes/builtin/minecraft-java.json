@@ -1,0 +1,103 @@
+{
+  "id": "minecraft-java",
+  "name": "Minecraft Java",
+  "description": "Vanilla Java server backed by itzg/minecraft-server.",
+  "version": "builtin-1",
+  "source": "builtin",
+  "enabled": true,
+  "inputs": [
+    {
+      "key": "server_name",
+      "label": "Server name",
+      "type": "string",
+      "default": "minecraft-1",
+      "required": true,
+      "editable_by": "user"
+    },
+    {
+      "key": "memory_mb",
+      "label": "Memory",
+      "type": "number",
+      "default": 2048,
+      "required": true,
+      "editable_by": "admin",
+      "min": 512,
+      "max": 32768
+    },
+    {
+      "key": "version",
+      "label": "Minecraft version",
+      "type": "string",
+      "default": "LATEST",
+      "required": true,
+      "editable_by": "user"
+    },
+    {
+      "key": "motd",
+      "label": "MOTD",
+      "type": "string",
+      "default": "A Deft Minecraft Server",
+      "required": false,
+      "editable_by": "user"
+    },
+    {
+      "key": "difficulty",
+      "label": "Difficulty",
+      "type": "select",
+      "default": "normal",
+      "required": true,
+      "editable_by": "user",
+      "options": ["peaceful", "easy", "normal", "hard"]
+    },
+    {
+      "key": "port",
+      "label": "Port",
+      "type": "number",
+      "default": 25565,
+      "required": true,
+      "editable_by": "admin",
+      "min": 1,
+      "max": 65535
+    }
+  ],
+  "container": {
+    "name": "{{ values.server_name }}",
+    "image": "itzg/minecraft-server:latest",
+    "ports": [
+      {
+        "host_port": "{{ values.port }}",
+        "container_port": 25565,
+        "protocol": "tcp"
+      }
+    ],
+    "env": [
+      {
+        "key": "EULA",
+        "value": "TRUE"
+      },
+      {
+        "key": "MEMORY",
+        "value": "{{ values.memory_mb }}M"
+      },
+      {
+        "key": "VERSION",
+        "value": "{{ values.version }}"
+      },
+      {
+        "key": "MOTD",
+        "value": "{{ values.motd }}"
+      },
+      {
+        "key": "DIFFICULTY",
+        "value": "{{ values.difficulty }}"
+      }
+    ],
+    "volumes": [
+      {
+        "host_path": "/var/lib/deft/volumes/{{ server_id }}",
+        "container_path": "/data"
+      }
+    ],
+    "restart_policy": "unless-stopped"
+  }
+}

@@ -3,18 +3,20 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ArrowLeft, Clock3, LogOut, Plus } from '@lucide/svelte';
-	import { defaults, superForm } from 'sveltekit-superforms';
-	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { auth, panel, type Container, type Node } from '$lib/api/client';
-	import { parseCreateConfig } from '$lib/container-config';
+	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { auth, panel, type Node, type Recipe, type RecipeInput } from '$lib/api/client';
 	import { backOrGoto } from '$lib/navigation';
-	import { createContainerSchema } from '$lib/schemas';
+
+	type RecipeValue = string | number | boolean;
 
 	let nodes = $state<Node[]>([]);
+	let recipes = $state<Recipe[]>([]);
+	let recipeValues = $state<Record<string, RecipeValue>>({});
+	let selectedRecipeID = $state('');
 	let loading = $state(true);
 	let createSubmitting = $state(false);
 	let createMessage = $state('');
@@ -22,66 +24,23 @@
 
 	const nodeID = $derived(page.params.nodeID);
 	const selectedNode = $derived(nodes.find((node) => node.id === nodeID));
-
-	const createContainerForm = superForm(
-		defaults(
-			{
-				name: 'minecraft-1',
-				image: 'itzg/minecraft-server:latest',
-				ports: '25565:25565/tcp',
-				env: 'EULA=TRUE',
-				volumes: '/var/lib/deft/volumes/minecraft-1:/data',
-				restart_policy: 'unless-stopped' as const,
-			},
-			zod4(createContainerSchema),
-		),
-		{
-			SPA: true,
-			validators: zod4(createContainerSchema),
-			async onUpdate({ form }) {
-				if (!form.valid || createSubmitting || !nodeID) return;
-
-				createSubmitting = true;
-				createMessage = 'Creating server...';
-				error = null;
-				try {
-					const config = parseCreateConfig(form.data);
-					const response = await panel.createContainer(nodeID, form.data.name, form.data.image, config);
-					savePendingCreate({
-						id: response.command_id,
-						node_id: nodeID,
-						name: form.data.name,
-						image: form.data.image,
-						status: 'create_requested',
-					});
-					createMessage = 'Server created. Opening server page...';
-					await goto(`/servers/${response.server_id || response.command_id}`);
-				} catch (err) {
-					error = cleanError(err);
-					createMessage = '';
-				} finally {
-					createSubmitting = false;
-				}
-			},
-		},
-	);
-
-	const {
-		form: createForm,
-		errors: createErrors,
-		constraints: createConstraints,
-		enhance: enhanceCreate,
-	} = createContainerForm;
+	const selectedRecipe = $derived(recipes.find((recipe) => recipe.id === selectedRecipeID));
 
 	onMount(() => {
-		void loadNodes();
+		void loadPage();
 	});
 
-	const loadNodes = async () => {
+	const loadPage = async () => {
 		loading = true;
 		error = null;
 		try {
-			nodes = await panel.nodes();
+			const [nodeList, recipeList] = await Promise.all([panel.nodes(), panel.recipes()]);
+			nodes = nodeList;
+			recipes = recipeList.filter((recipe) => recipe.enabled);
+			if (recipes.length > 0 && !selectedRecipeID) {
+				selectedRecipeID = recipes[0].id;
+				resetRecipeValues(recipes[0]);
+			}
 		} catch (err) {
 			error = cleanError(err);
 			if (error.includes('missing session') || error.includes('invalid session')) {
@@ -92,19 +51,50 @@
 		}
 	};
 
-	const savePendingCreate = (container: Container) => {
-		if (!nodeID) return;
-		const storageKey = pendingCreateStorageKey(nodeID);
-		const rawValue = sessionStorage.getItem(storageKey);
-		let pending: Container[] = [];
-		if (rawValue) {
-			try {
-				pending = JSON.parse(rawValue) as Container[];
-			} catch {
-				pending = [];
+	const resetRecipeValues = (recipe: Recipe) => {
+		const nextValues: Record<string, RecipeValue> = {};
+		for (const input of recipe.inputs) {
+			if (input.default !== undefined) {
+				nextValues[input.key] = input.default;
+			} else {
+				nextValues[input.key] = input.type === 'number' ? 0 : '';
 			}
 		}
-		sessionStorage.setItem(storageKey, JSON.stringify([...pending, container]));
+		recipeValues = nextValues;
+	};
+
+	const selectRecipe = (recipeID: string) => {
+		selectedRecipeID = recipeID;
+		const recipe = recipes.find((item) => item.id === recipeID);
+		if (recipe) {
+			resetRecipeValues(recipe);
+		}
+	};
+
+	const setRecipeValue = (input: RecipeInput, rawValue: string) => {
+		let value: RecipeValue = rawValue;
+		if (input.type === 'number') {
+			value = rawValue === '' ? '' : Number(rawValue);
+		}
+		recipeValues = { ...recipeValues, [input.key]: value };
+	};
+
+	const createServer = async () => {
+		if (!nodeID || !selectedRecipe || createSubmitting) return;
+
+		createSubmitting = true;
+		createMessage = 'Creating server...';
+		error = null;
+		try {
+			const response = await panel.createServerFromRecipe(nodeID, selectedRecipe.id, recipeValues);
+			createMessage = 'Server created. Opening server page...';
+			await goto(`/servers/${response.server_id || response.command_id}`);
+		} catch (err) {
+			error = cleanError(err);
+			createMessage = '';
+		} finally {
+			createSubmitting = false;
+		}
 	};
 
 	const logout = async () => {
@@ -115,8 +105,6 @@
 	const cleanError = (err: unknown) => {
 		return err instanceof Error ? err.message.trim() : 'Request failed';
 	};
-
-	const pendingCreateStorageKey = (id: string) => `deft.pending-creates.${id}`;
 </script>
 
 <svelte:head>
@@ -147,7 +135,7 @@
 		</div>
 	</header>
 
-	<div class="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
+	<div class="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
 		<Card>
 			<CardHeader>
 				<CardTitle>Server Settings</CardTitle>
@@ -163,112 +151,76 @@
 						{createMessage}
 					</div>
 				{/if}
+
 				{#if loading}
 					<p class="text-sm text-zinc-400">Loading agent...</p>
 				{:else if !selectedNode}
 					<p class="text-sm text-zinc-400">Agent not found.</p>
 				{:else if !selectedNode.connected}
 					<p class="text-sm text-zinc-400">Start the agent before creating servers.</p>
-				{:else}
-					<form class="space-y-5" method="POST" use:enhanceCreate>
-						<div class="grid gap-4 md:grid-cols-2">
-							<div>
-								<Label for="container-name">Name</Label>
-								<Input
-									id="container-name"
-									name="name"
-									bind:value={$createForm.name}
-									autocomplete="off"
-									disabled={createSubmitting}
-									aria-invalid={$createErrors.name ? 'true' : undefined}
-									{...$createConstraints.name}
-								/>
-								{#if $createErrors.name}
-									<p class="mt-1 text-sm text-red-300">{$createErrors.name[0]}</p>
-								{/if}
-							</div>
-							<div>
-								<Label for="container-image">Image</Label>
-								<Input
-									id="container-image"
-									name="image"
-									bind:value={$createForm.image}
-									autocomplete="off"
-									disabled={createSubmitting}
-									aria-invalid={$createErrors.image ? 'true' : undefined}
-									{...$createConstraints.image}
-								/>
-								{#if $createErrors.image}
-									<p class="mt-1 text-sm text-red-300">{$createErrors.image[0]}</p>
-								{/if}
-							</div>
-						</div>
-
+				{:else if recipes.length === 0}
+					<p class="text-sm text-zinc-400">No recipes are available.</p>
+				{:else if selectedRecipe}
+					<form
+						class="space-y-5"
+						onsubmit={(event) => {
+							event.preventDefault();
+							void createServer();
+						}}
+					>
 						<div>
-							<Label for="container-ports">Ports</Label>
-							<textarea
-								id="container-ports"
-								name="ports"
-								bind:value={$createForm.ports}
-								class="mt-2 min-h-20 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
-								placeholder="25565:25565/tcp"
-								disabled={createSubmitting}
-							></textarea>
-							<p class="mt-1 text-xs text-zinc-500">One per line: host:container/protocol.</p>
-							{#if $createErrors.ports}
-								<p class="mt-1 text-sm text-red-300">{$createErrors.ports[0]}</p>
-							{/if}
-						</div>
-
-						<div>
-							<Label for="container-env">Environment</Label>
-							<textarea
-								id="container-env"
-								name="env"
-								bind:value={$createForm.env}
-								class="mt-2 min-h-24 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
-								placeholder="EULA=TRUE"
-								disabled={createSubmitting}
-							></textarea>
-							<p class="mt-1 text-xs text-zinc-500">One per line: KEY=value.</p>
-							{#if $createErrors.env}
-								<p class="mt-1 text-sm text-red-300">{$createErrors.env[0]}</p>
-							{/if}
-						</div>
-
-						<div>
-							<Label for="container-volumes">Volumes</Label>
-							<textarea
-								id="container-volumes"
-								name="volumes"
-								bind:value={$createForm.volumes}
-								class="mt-2 min-h-20 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
-								placeholder="/var/lib/deft/volumes/minecraft-1:/data"
-								disabled={createSubmitting}
-							></textarea>
-							<p class="mt-1 text-xs text-zinc-500">One per line: host:container[:ro]. Host path must be under /var/lib/deft/volumes.</p>
-							{#if $createErrors.volumes}
-								<p class="mt-1 text-sm text-red-300">{$createErrors.volumes[0]}</p>
-							{/if}
-						</div>
-
-						<div>
-							<Label for="container-restart-policy">Restart policy</Label>
+							<Label for="server-recipe">Recipe</Label>
 							<select
-								id="container-restart-policy"
-								name="restart_policy"
-								bind:value={$createForm.restart_policy}
+								id="server-recipe"
+								value={selectedRecipeID}
 								class="mt-2 h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-zinc-500"
 								disabled={createSubmitting}
+								onchange={(event) => selectRecipe(event.currentTarget.value)}
 							>
-								<option value="no">No restart</option>
-								<option value="unless-stopped">Unless stopped</option>
-								<option value="on-failure">On failure</option>
-								<option value="always">Always</option>
+								{#each recipes as recipe (recipe.id)}
+									<option value={recipe.id}>{recipe.name}</option>
+								{/each}
 							</select>
-							{#if $createErrors.restart_policy}
-								<p class="mt-1 text-sm text-red-300">{$createErrors.restart_policy[0]}</p>
-							{/if}
+							<p class="mt-2 text-sm text-zinc-400">{selectedRecipe.description}</p>
+						</div>
+
+						<div class="grid gap-4 md:grid-cols-2">
+							{#each selectedRecipe.inputs as input (input.key)}
+								<div>
+									<div class="flex items-center gap-2">
+										<Label for={`recipe-${input.key}`}>{input.label}</Label>
+										{#if input.editable_by === 'admin'}
+											<Badge variant="default">admin</Badge>
+										{/if}
+									</div>
+									{#if input.type === 'select'}
+										<select
+											id={`recipe-${input.key}`}
+											value={String(recipeValues[input.key] ?? '')}
+											class="mt-2 h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-zinc-500"
+											required={input.required}
+											disabled={createSubmitting}
+											onchange={(event) => setRecipeValue(input, event.currentTarget.value)}
+										>
+											{#each input.options || [] as option (option)}
+												<option value={option}>{option}</option>
+											{/each}
+										</select>
+									{:else}
+										<Input
+											id={`recipe-${input.key}`}
+											type={input.type === 'number' ? 'number' : 'text'}
+											value={String(recipeValues[input.key] ?? '')}
+											min={input.min}
+											max={input.max}
+											required={input.required}
+											autocomplete="off"
+											disabled={createSubmitting}
+											oninput={(event) => setRecipeValue(input, event.currentTarget.value)}
+										/>
+									{/if}
+								</div>
+							{/each}
 						</div>
 
 						<div class="flex justify-end gap-2">

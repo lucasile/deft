@@ -80,6 +80,28 @@ export type CreateContainerConfig = {
 	restart_policy?: string;
 };
 
+export type RecipeInput = {
+	key: string;
+	label: string;
+	type: 'string' | 'number' | 'select';
+	default?: string | number | boolean;
+	required: boolean;
+	editable_by: 'user' | 'admin';
+	min?: number;
+	max?: number;
+	options?: string[];
+};
+
+export type Recipe = {
+	id: string;
+	name: string;
+	description: string;
+	version: string;
+	source: string;
+	enabled: boolean;
+	inputs: RecipeInput[];
+};
+
 export type PanelEventName = 'nodes.changed' | 'command.updated' | 'containers.changed';
 
 export type PanelEventPayload = {
@@ -230,6 +252,25 @@ export const panel = {
 		const response = await apiFetch(`/api/nodes/${nodeID}/containers`, {
 			method: 'POST',
 			body: JSON.stringify({ name, image, ...config }),
+		});
+		if (!response.ok) {
+			throw new Error(await response.text());
+		}
+		return response.json();
+	},
+
+	recipes: async (): Promise<Recipe[]> => {
+		const response = await apiFetch('/api/recipes');
+		if (!response.ok) {
+			throw new Error(await response.text());
+		}
+		return response.json();
+	},
+
+	createServerFromRecipe: async (nodeID: string, recipeID: string, recipeValues: Record<string, string | number | boolean>): Promise<CommandResponse> => {
+		const response = await apiFetch(`/api/nodes/${nodeID}/containers`, {
+			method: 'POST',
+			body: JSON.stringify({ recipe_id: recipeID, recipe_values: recipeValues }),
 		});
 		if (!response.ok) {
 			throw new Error(await response.text());

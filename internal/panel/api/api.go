@@ -17,6 +17,7 @@ import (
 	"github.com/lucasile/deft/internal/panel/events"
 	"github.com/lucasile/deft/internal/panel/join"
 	"github.com/lucasile/deft/internal/panel/nodes"
+	"github.com/lucasile/deft/internal/panel/recipes"
 	"github.com/lucasile/deft/internal/panel/servers"
 	"github.com/lucasile/deft/internal/proto"
 	"github.com/rs/zerolog/log"
@@ -84,6 +85,7 @@ func (s *Server) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/events", s.requireAuth(s.handleEvents))
 	mux.HandleFunc("GET /api/commands", s.requireAuth(s.handleListCommands))
 	mux.HandleFunc("GET /api/commands/{commandID}", s.requireAuth(s.handleGetCommand))
+	mux.HandleFunc("GET /api/recipes", s.requireAuth(s.handleListRecipes))
 	mux.HandleFunc("GET /api/servers", s.requireAuth(s.handleListServers))
 	mux.HandleFunc("GET /api/servers/{serverID}", s.requireAuth(s.handleGetServer))
 	mux.HandleFunc("POST /api/servers/{serverID}/start", s.rateLimitAction(s.requireAuth(s.requireCSRF(s.handleStartServer))))
@@ -121,6 +123,8 @@ type createContainerRequest struct {
 	Env           []envVarRequest      `json:"env,omitempty"`
 	Volumes       []volumeMountRequest `json:"volumes,omitempty"`
 	RestartPolicy string               `json:"restart_policy,omitempty"`
+	RecipeID      string               `json:"recipe_id,omitempty"`
+	RecipeValues  map[string]any       `json:"recipe_values,omitempty"`
 }
 
 type commandResponse struct {
@@ -630,6 +634,10 @@ func (s *Server) handleGetCommand(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, command)
 }
 
+func (s *Server) handleListRecipes(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, recipes.List())
+}
+
 func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 	serverList, err := s.serverManager.List()
 	if err != nil {
@@ -941,6 +949,31 @@ func (s *Server) handleCreateContainer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	commandID, err := newCommandID()
+	if err != nil {
+		s.auditCurrentUser(r, "container.create", nodeID, req.Name, "", false, err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	desiredConfig := any(req)
+	req.RecipeID = strings.TrimSpace(req.RecipeID)
+	if req.RecipeID != "" {
+		rendered, err := recipes.Render(req.RecipeID, commandID, req.RecipeValues)
+		if err != nil {
+			s.auditCurrentUser(r, "container.create", nodeID, req.RecipeID, commandID, false, err.Error())
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		req.Name = rendered.Name
+		req.Image = rendered.Image
+		req.Ports = recipePorts(rendered.Ports)
+		req.Env = recipeEnv(rendered.Env)
+		req.Volumes = recipeVolumes(rendered.Volumes)
+		req.RestartPolicy = rendered.RestartPolicy
+		desiredConfig = recipes.DesiredConfig(rendered)
+	}
+
 	req.Name = strings.TrimSpace(req.Name)
 	req.Image = strings.TrimSpace(req.Image)
 	req.RestartPolicy = strings.TrimSpace(req.RestartPolicy)
@@ -961,12 +994,6 @@ func (s *Server) handleCreateContainer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	commandID, err := newCommandID()
-	if err != nil {
-		s.auditCurrentUser(r, "container.create", nodeID, req.Name, "", false, err.Error())
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 	dockerName := dockerContainerName(nodeID, commandID)
 
 	cmd := &proto.PanelCommand{
@@ -997,7 +1024,7 @@ func (s *Server) handleCreateContainer(w http.ResponseWriter, r *http.Request) {
 		NodeID:        nodeID,
 		Image:         req.Image,
 		Status:        "create_requested",
-		DesiredConfig: req,
+		DesiredConfig: desiredConfig,
 	}); err != nil {
 		s.auditCurrentUser(r, "container.create", nodeID, req.Name, commandID, false, err.Error())
 		_ = s.nodeManager.CompleteCommand(commandID, false, err.Error())
@@ -1014,7 +1041,39 @@ func (s *Server) handleCreateContainer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.auditCurrentUser(r, "container.create", nodeID, req.Name, commandID, true, "")
-	writeJSON(w, http.StatusAccepted, commandResponse{CommandID: commandID})
+	writeJSON(w, http.StatusAccepted, commandResponse{CommandID: commandID, ServerID: commandID})
+}
+
+func recipePorts(ports []recipes.PortMapping) []portMappingRequest {
+	result := make([]portMappingRequest, 0, len(ports))
+	for _, port := range ports {
+		result = append(result, portMappingRequest{
+			HostPort:      port.HostPort,
+			ContainerPort: port.ContainerPort,
+			Protocol:      port.Protocol,
+		})
+	}
+	return result
+}
+
+func recipeEnv(env []recipes.EnvVar) []envVarRequest {
+	result := make([]envVarRequest, 0, len(env))
+	for _, item := range env {
+		result = append(result, envVarRequest{Key: item.Key, Value: item.Value})
+	}
+	return result
+}
+
+func recipeVolumes(volumes []recipes.VolumeMount) []volumeMountRequest {
+	result := make([]volumeMountRequest, 0, len(volumes))
+	for _, volume := range volumes {
+		result = append(result, volumeMountRequest{
+			HostPath:      volume.HostPath,
+			ContainerPath: volume.ContainerPath,
+			ReadOnly:      volume.ReadOnly,
+		})
+	}
+	return result
 }
 
 func (s *Server) handleStartContainer(w http.ResponseWriter, r *http.Request) {

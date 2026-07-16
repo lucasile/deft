@@ -50,6 +50,7 @@
 - [x] Added server-level action APIs: `POST /api/servers/{serverID}/start`, `/stop`, and `/remove`. The server page now calls these endpoints instead of direct container action APIs.
 - [x] Added real server restart support: protobuf `RestartContainer`, agent Docker restart dispatch, `POST /api/servers/{serverID}/restart`, and a server page Restart action.
 - [x] Removed/removing/missing servers are hidden from the default dashboard server list. Inventory sync no longer rewrites a `remove_requested` server to `missing` while removal is settling.
+- [x] Added the first recipe foundation: recipe files, `GET /api/recipes`, recipe-driven server creation, recipe-rendered Docker config, and recipe input metadata for future user/admin edit permissions.
 
 ## Current Task
 **Implement Panel gRPC Server & REST API Core**
@@ -86,6 +87,8 @@ The panel should:
 - Restart is a typed panel-to-agent command, not a UI stop/start sequence.
 - Server removal should disappear from the normal dashboard immediately. Command history remains the audit trail for success/failure.
 - Keep operational server management separate from Docker/container configuration. Config belongs on a dedicated settings/config page or advanced container page, not the main management page.
+- Recipes are the product-facing creation/config model. Recipes should be data definitions loaded by the panel, not per-game Go branches. Recipes render into allowlisted Docker config; users should not normally edit raw images/env/ports/volumes directly. Recipe inputs must declare who may edit them (`user` vs `admin`) so future non-admin UX and API enforcement can respect fields like RAM allocation.
+- Community recipes are not globally trusted just because they exist. A self-hosted panel admin imports/enables recipes for that panel, and future trust/permission levels should make the source and capabilities explicit before users can create servers from them.
 - Advanced container pages should expose the owning server's config page when the container is linked to a server.
 - Avoid duplicate primary CTAs in the same card empty state. If a card header already has the action, the empty state should explain what is missing, not repeat the same button.
 - Do not simulate or override browser Back/Forward with custom history stacks. Use normal SvelteKit navigation and explicit return-target query params for special advanced/debug paths.
@@ -102,4 +105,4 @@ The panel should:
 - Dashboard is functional for the current backend core. It uses local shadcn-style components under `internal/panel/ui/web/src/lib/components/ui`. It still needs container listing, clearer empty/setup states, and production UI polish.
 
 ## Last Updated
-2026-07-15
+2026-07-16
