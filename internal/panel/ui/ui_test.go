@@ -28,6 +28,7 @@ func TestHandlerServesExtensionlessStaticRoutes(t *testing.T) {
 		{path: "/register", want: "register", code: http.StatusOK},
 		{path: "/servers/new", want: "index", code: http.StatusOK},
 		{path: "/servers/server_123", want: "index", code: http.StatusOK},
+		{path: "/servers/server_123/config", want: "index", code: http.StatusOK},
 		{path: "/nodes/node_123", want: "index", code: http.StatusOK},
 		{path: "/nodes/node_123/containers/new", want: "index", code: http.StatusOK},
 		{path: "/nodes/node_123/containers/container_456", want: "index", code: http.StatusOK},

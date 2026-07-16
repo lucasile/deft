@@ -45,6 +45,8 @@
 - [x] Added history-aware back navigation for nested panel routes so shared entry points can return to the actual previous page while still falling back to the dashboard or parent route on direct loads.
 - [x] Server creation now gives visible in-flight feedback and redirects to the new server detail page. The create response returns `server_id` alongside `command_id`.
 - [x] Server detail pages now subscribe to panel events and refresh quietly, so create/start/stop status changes do not require manual page refreshes.
+- [x] Started moving normal management onto the server detail page: linked-container start/stop/remove controls, live logs, status reconciliation, and destructive remove confirmation now live on `/servers/{serverID}`.
+- [x] Moved Docker-backed desired config off the normal server management page to `/servers/{serverID}/config`, with an advanced link to the backing container.
 
 ## Current Task
 **Implement Panel gRPC Server & REST API Core**
@@ -76,7 +78,11 @@ The panel should:
 - Successful server creation should land on the server detail page, not the node/container debug page.
 - Server detail should become the main management surface for actions, logs, config, health, and backups. Raw container pages can remain available as advanced/debug views, but should not be the normal user path.
 - Server detail pages should live-update from panel events anywhere status or linked container state can change.
+- Until dedicated server action APIs exist, server page actions may call the linked container APIs under the hood. Keep that implementation detail out of the primary UX.
+- Keep operational server management separate from Docker/container configuration. Config belongs on a dedicated settings/config page or advanced container page, not the main management page.
+- Advanced container pages should expose the owning server's config page when the container is linked to a server.
 - Avoid duplicate primary CTAs in the same card empty state. If a card header already has the action, the empty state should explain what is missing, not repeat the same button.
+- Do not simulate or override browser Back/Forward with custom history stacks. Use normal SvelteKit navigation and explicit return-target query params for special advanced/debug paths.
 - Do not allow arbitrary host path mounts from the panel. Deft-created volume mounts should stay under `/var/lib/deft/volumes/...` unless a future explicit admin-only escape hatch is designed and audited.
 - One installed agent per machine is the intended model. Dev/test multi-agent runs must use unique `node_id` values.
 - Production gRPC must use mTLS. Insecure gRPC is only for local development with `DEFT_DEV=true`.

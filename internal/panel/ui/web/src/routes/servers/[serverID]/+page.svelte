@@ -1,9 +1,11 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { ArrowLeft, Box, Clock3, Container, LogOut, ServerIcon } from '@lucide/svelte';
-	import { auth, panel, type PanelEventPayload, type Server } from '$lib/api/client';
+	import { ArrowLeft, Box, Clock3, Container, LogOut, Play, RefreshCw, Settings, Square, Trash2, ServerIcon } from '@lucide/svelte';
+	import { auth, panel, type LogChunkPayload, type PanelEventPayload, type Server } from '$lib/api/client';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
@@ -11,12 +13,31 @@
 
 	let server = $state<Server | null>(null);
 	let loading = $state(true);
+	let busy = $state(false);
 	let error = $state<string | null>(null);
+	let logText = $state('');
+	let logLoading = $state(false);
+	let logError = $state<string | null>(null);
+	let logLive = $state(false);
+	let localServerStatus = $state<string | null>(null);
+	let pendingActionCommandID = $state('');
+	let confirmAction = $state<'remove-server' | null>(null);
+	let logOutputElement = $state<HTMLPreElement | null>(null);
+	let logEvents: EventSource | null = null;
+	let logDecoder = new TextDecoder();
+	let autoStartedLogForStatus = '';
 
 	const serverID = $derived(page.params.serverID);
+	const displayStatus = $derived(localServerStatus || server?.status || '');
+	const actionPending = $derived(displayStatus.endsWith('_requested'));
+	const hasLinkedContainer = $derived(Boolean(server?.node_id && server.container_id));
+	const canAct = $derived(Boolean(hasLinkedContainer && !actionPending));
+	const canStart = $derived(Boolean(canAct && displayStatus !== 'running'));
+	const canStop = $derived(Boolean(canAct && displayStatus === 'running'));
+	const canRemove = $derived(Boolean(canAct));
 
 	onMount(() => {
-		void loadServer();
+		void loadInitialData();
 
 		const events = panel.events();
 		events.addEventListener('containers.changed', (event) => {
@@ -25,11 +46,25 @@
 				void loadServer({ quiet: true });
 			}
 		});
-		events.addEventListener('command.updated', () => {
+		events.addEventListener('command.updated', (event) => {
+			const payload = parseEventPayload(event);
+			if (payload.command_id && payload.command_id === pendingActionCommandID) {
+				pendingActionCommandID = '';
+			}
 			void loadServer({ quiet: true });
 		});
-		return () => events.close();
+		return () => {
+			events.close();
+			stopLiveLogs();
+		};
 	});
+
+	const loadInitialData = async () => {
+		await loadServer();
+		if (!logEvents && !logLoading) {
+			startLiveLogs();
+		}
+	};
 
 	const loadServer = async (options: { quiet?: boolean } = {}) => {
 		if (!serverID) return;
@@ -38,7 +73,10 @@
 			error = null;
 		}
 		try {
-			server = await panel.server(serverID);
+			const nextServer = await panel.server(serverID);
+			server = nextServer;
+			reconcileLocalServerStatus(nextServer);
+			maybeStartLogsForRunningServer(nextServer);
 		} catch (err) {
 			error = cleanError(err);
 			if (error.includes('missing session') || error.includes('invalid session')) {
@@ -48,6 +86,132 @@
 			if (!options.quiet) {
 				loading = false;
 			}
+		}
+	};
+
+	const runServerAction = async (action: 'start' | 'stop' | 'remove') => {
+		if (!server?.node_id || !server.container_id || !canAct) return;
+		busy = true;
+		error = null;
+		const previousStatus = localServerStatus;
+		localServerStatus = requestedStatus(action);
+		try {
+			if (action === 'start') {
+				autoStartedLogForStatus = '';
+			}
+			const response = await panel.containerAction(server.node_id, server.container_id, action);
+			pendingActionCommandID = response.command_id;
+			if (action === 'remove') {
+				stopLiveLogs();
+				await goto('/');
+				return;
+			}
+			await loadServer({ quiet: true });
+		} catch (err) {
+			localServerStatus = previousStatus;
+			pendingActionCommandID = '';
+			error = cleanError(err);
+		} finally {
+			busy = false;
+			confirmAction = null;
+		}
+	};
+
+	const requestedStatus = (action: 'start' | 'stop' | 'remove') => {
+		if (action === 'start') return 'start_requested';
+		if (action === 'stop') return 'stop_requested';
+		return 'remove_requested';
+	};
+
+	const reconcileLocalServerStatus = (nextServer: Server) => {
+		if (!localServerStatus) return;
+		if (nextServer.status && nextServer.status !== localServerStatus && !nextServer.status.endsWith('_requested')) {
+			localServerStatus = null;
+			pendingActionCommandID = '';
+		}
+	};
+
+	const maybeStartLogsForRunningServer = (nextServer: Server) => {
+		if (!nextServer.node_id || !nextServer.container_id || nextServer.status !== 'running') return;
+		if (logEvents || logLoading || logLive) return;
+
+		const statusKey = `${nextServer.container_id}:running`;
+		if (autoStartedLogForStatus === statusKey) return;
+		autoStartedLogForStatus = statusKey;
+		void startLiveLogs();
+	};
+
+	const startLiveLogs = async () => {
+		if (!server?.node_id || !server.container_id) return;
+		stopLiveLogs();
+		logText = '';
+		logError = null;
+		logLoading = true;
+		logLive = false;
+		logDecoder = new TextDecoder();
+
+		let streamID = '';
+		try {
+			const response = await panel.createContainerLogStream(server.node_id, server.container_id);
+			streamID = response.stream_id;
+		} catch (err) {
+			logLoading = false;
+			logError = cleanError(err);
+			return;
+		}
+
+		const stream = panel.containerLogStream(server.node_id, server.container_id, streamID);
+		logEvents = stream;
+		stream.addEventListener('ready', () => {
+			logLoading = false;
+			logLive = true;
+		});
+		stream.addEventListener('logs.chunk', (event) => {
+			const payload = parseLogChunk(event);
+			if (!payload) return;
+			if (payload.error) {
+				logError = payload.error;
+				logLive = false;
+			}
+			if (payload.data) {
+				logText += decodeBase64Chunk(payload.data, !payload.eof);
+				void scrollLogsToBottom();
+			}
+			if (payload.eof) {
+				logText += logDecoder.decode();
+				logLive = false;
+				logLoading = false;
+				stream.close();
+				if (logEvents === stream) {
+					logEvents = null;
+				}
+			}
+		});
+		stream.onerror = () => {
+			logLoading = false;
+			logLive = false;
+			if (!logText && !logError) {
+				logError = 'Log stream disconnected.';
+			}
+			stream.close();
+			if (logEvents === stream) {
+				logEvents = null;
+			}
+		};
+	};
+
+	const stopLiveLogs = () => {
+		if (logEvents) {
+			logEvents.close();
+			logEvents = null;
+		}
+		logLive = false;
+	};
+
+	const scrollLogsToBottom = async () => {
+		await tick();
+		if (logOutputElement) {
+			logOutputElement.scrollTop = logOutputElement.scrollHeight;
 		}
 	};
 
@@ -70,17 +234,6 @@
 		return new Date(seconds * 1000).toLocaleString();
 	};
 
-	const formatDesiredConfig = (value?: string) => {
-		if (!value) return '{}';
-		try {
-			return JSON.stringify(JSON.parse(value), null, 2);
-		} catch {
-			return value;
-		}
-	};
-
-	const desiredConfig = $derived(formatDesiredConfig(server?.desired_config_json));
-
 	const openNode = () => {
 		if (!server) return;
 		goto(`/nodes/${server.node_id}`);
@@ -88,7 +241,7 @@
 
 	const openContainer = () => {
 		if (!server?.container_id) return;
-		goto(`/nodes/${server.node_id}/containers/${server.container_id}`);
+		goto(`/nodes/${server.node_id}/containers/${server.container_id}?from=${encodeURIComponent(`/servers/${serverID}`)}`);
 	};
 
 	const cleanError = (err: unknown) => {
@@ -103,6 +256,25 @@
 		} catch {
 			return {};
 		}
+	};
+
+	const parseLogChunk = (event: Event): LogChunkPayload | null => {
+		if (!(event instanceof MessageEvent) || typeof event.data !== 'string') return null;
+
+		try {
+			return JSON.parse(event.data) as LogChunkPayload;
+		} catch {
+			return null;
+		}
+	};
+
+	const decodeBase64Chunk = (value: string, streaming: boolean) => {
+		const binary = atob(value);
+		const bytes = new Uint8Array(binary.length);
+		for (let index = 0; index < binary.length; index += 1) {
+			bytes[index] = binary.charCodeAt(index);
+		}
+		return logDecoder.decode(bytes, { stream: streaming });
 	};
 </script>
 
@@ -122,6 +294,10 @@
 				<p class="mt-1 truncate text-sm text-zinc-400">{server?.image || 'Server'}</p>
 			</div>
 			<div class="flex gap-2">
+				<Button type="button" variant="outline" onclick={() => goto(`/servers/${serverID}/config`)}>
+					<Settings size={16} />
+					Config
+				</Button>
 				<Button type="button" variant="outline" onclick={() => goto('/commands')}>
 					<Clock3 size={16} />
 					History
@@ -157,7 +333,27 @@
 								<p class="truncate text-sm font-medium text-white">{server.name}</p>
 								<p class="mt-1 truncate font-mono text-xs text-zinc-500">{server.id}</p>
 							</div>
-							<Badge variant={statusVariant(server.status)}>{server.status || 'unknown'}</Badge>
+							<Badge variant={statusVariant(displayStatus)}>{displayStatus || 'unknown'}</Badge>
+						</div>
+
+						<div class="grid grid-cols-3 gap-2">
+							<Button type="button" variant="outline" disabled={busy || !canStart} onclick={() => runServerAction('start')}>
+								<Play size={15} />
+								Start
+							</Button>
+							<Button type="button" variant="outline" disabled={busy || !canStop} onclick={() => runServerAction('stop')}>
+								<Square size={15} />
+								Stop
+							</Button>
+							<Button
+								type="button"
+								variant="destructive"
+								disabled={busy || !canRemove}
+								onclick={() => (confirmAction = 'remove-server')}
+							>
+								<Trash2 size={15} />
+								Remove
+							</Button>
 						</div>
 
 						<div class="grid gap-3 text-sm">
@@ -207,15 +403,46 @@
 			</Card>
 		</section>
 
-		<section>
+		<section class="space-y-6">
 			<Card>
-				<CardHeader>
-					<CardTitle>Desired Config</CardTitle>
+				<CardHeader class="flex flex-row items-center justify-between">
+					<div>
+						<CardTitle>Logs</CardTitle>
+						<p class="text-sm text-zinc-400">{logLive ? 'Live' : 'Not connected'}</p>
+					</div>
+					<Button type="button" variant="outline" size="sm" disabled={busy || !server?.container_id} onclick={startLiveLogs}>
+						<RefreshCw size={14} />
+						Restart logs
+					</Button>
 				</CardHeader>
 				<CardContent>
-					<pre class="max-h-[36rem] overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-300">{desiredConfig}</pre>
+					{#if !server?.container_id}
+						<p class="py-8 text-sm text-zinc-400">Logs will appear after the server container is created.</p>
+					{:else if logLoading}
+						<p class="py-8 text-sm text-zinc-400">Loading recent logs...</p>
+					{:else if logError}
+						<div class="rounded-md border border-red-900/60 bg-red-950/60 px-3 py-2 text-sm text-red-200">
+							{logError}
+						</div>
+					{:else}
+						<pre
+							bind:this={logOutputElement}
+							class="max-h-[28rem] overflow-auto whitespace-pre-wrap rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-300"
+						>{logText || 'No logs available.'}</pre>
+					{/if}
 				</CardContent>
 			</Card>
+
 		</section>
 	</div>
+
+	<ConfirmDialog
+		bind:open={() => confirmAction === 'remove-server', (value) => {
+			if (!value) confirmAction = null;
+		}}
+		title="Remove server?"
+		description={`Remove "${server?.name || 'this server'}" from its node? This deletes the backing container and its volumes.`}
+		confirmLabel="Remove"
+		onconfirm={() => runServerAction('remove')}
+	/>
 </main>

@@ -3,8 +3,8 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { ArrowLeft, Clock3, LogOut, Play, RefreshCw, Square, Trash2 } from '@lucide/svelte';
-	import { auth, panel, type Container, type LogChunkPayload, type Node, type PanelEventPayload } from '$lib/api/client';
+	import { ArrowLeft, Clock3, LogOut, Play, RefreshCw, Settings, Square, Trash2 } from '@lucide/svelte';
+	import { auth, panel, type Container, type LogChunkPayload, type Node, type PanelEventPayload, type Server } from '$lib/api/client';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
@@ -13,6 +13,7 @@
 
 	let nodes = $state<Node[]>([]);
 	let containers = $state<Container[]>([]);
+	let servers = $state<Server[]>([]);
 	let loading = $state(true);
 	let busy = $state(false);
 	let error = $state<string | null>(null);
@@ -30,8 +31,10 @@
 
 	const nodeID = $derived(page.params.nodeID);
 	const containerID = $derived(page.params.containerID);
+	const returnPath = $derived(page.url.searchParams.get('from') || `/nodes/${nodeID}`);
 	const selectedNode = $derived(nodes.find((node) => node.id === nodeID));
 	const container = $derived(containers.find((item) => item.id === containerID));
+	const linkedServer = $derived(servers.find((item) => item.node_id === nodeID && item.container_id === containerID));
 	const canAct = $derived(Boolean(selectedNode?.connected && container));
 	const displayStatus = $derived(localContainerStatus || container?.status || '');
 	const actionPending = $derived(displayStatus.endsWith('_requested'));
@@ -50,6 +53,7 @@
 			const payload = parseEventPayload(event);
 			if (!payload.node_id || payload.node_id === nodeID) {
 				void loadContainers({ quiet: true });
+				void loadServers();
 			}
 		});
 		events.addEventListener('command.updated', (event) => {
@@ -58,6 +62,7 @@
 				pendingActionCommandID = '';
 			}
 			void loadContainers({ quiet: true });
+			void loadServers();
 		});
 		return () => {
 			events.close();
@@ -75,7 +80,7 @@
 	const loadAll = async () => {
 		loading = true;
 		error = null;
-		await Promise.all([loadNodes({ quiet: true }), loadContainers({ quiet: true })]);
+		await Promise.all([loadNodes({ quiet: true }), loadContainers({ quiet: true }), loadServers()]);
 		loading = false;
 	};
 
@@ -99,6 +104,14 @@
 			containers = nextContainers;
 			reconcileLocalContainerStatus(nextContainers);
 			maybeStartLogsForRunningContainer(nextContainers);
+		} catch (err) {
+			error = cleanError(err);
+		}
+	};
+
+	const loadServers = async () => {
+		try {
+			servers = await panel.servers();
 		} catch (err) {
 			error = cleanError(err);
 		}
@@ -291,7 +304,7 @@
 	<header class="border-b border-zinc-800 bg-zinc-950/95">
 		<div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
 			<div class="min-w-0">
-				<Button type="button" variant="ghost" class="mb-2 px-0 text-zinc-400 hover:text-white" onclick={() => backOrGoto(`/nodes/${nodeID}`)}>
+				<Button type="button" variant="ghost" class="mb-2 px-0 text-zinc-400 hover:text-white" onclick={() => backOrGoto(returnPath)}>
 					<ArrowLeft size={16} />
 					Back
 				</Button>
@@ -299,6 +312,12 @@
 				<p class="mt-1 truncate text-sm text-zinc-400">{selectedNode?.name || nodeID}</p>
 			</div>
 			<div class="flex gap-2">
+				{#if linkedServer}
+					<Button type="button" variant="outline" onclick={() => goto(`/servers/${linkedServer.id}/config`)}>
+						<Settings size={16} />
+						Config
+					</Button>
+				{/if}
 				<Button type="button" variant="outline" onclick={() => goto('/commands')}>
 					<Clock3 size={16} />
 					History
