@@ -4,8 +4,6 @@
 
 Deft is an open source panel for managing game servers and Docker applications across multiple nodes. Install the agent on any Linux server with one command — it connects back to your panel automatically. No open ports, no manual configuration, no 48-hour setup guides.
 
-> ⚠️ Deft is in early development and not yet ready for production use.
-
 ---
 
 ## How it works
