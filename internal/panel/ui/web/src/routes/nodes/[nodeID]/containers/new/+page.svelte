@@ -115,7 +115,7 @@
 </script>
 
 <svelte:head>
-	<title>Create Container - Deft Panel</title>
+	<title>Create Server - Deft Panel</title>
 </svelte:head>
 
 <main class="min-h-screen bg-zinc-950 text-zinc-100">
@@ -126,7 +126,7 @@
 					<ArrowLeft size={16} />
 					Agent
 				</Button>
-				<h1 class="truncate text-xl font-semibold tracking-normal text-white">Create container</h1>
+				<h1 class="truncate text-xl font-semibold tracking-normal text-white">Create server</h1>
 				<p class="mt-1 truncate text-sm text-zinc-400">{selectedNode?.name || nodeID}</p>
 			</div>
 			<div class="flex gap-2">
@@ -145,7 +145,7 @@
 	<div class="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
 		<Card>
 			<CardHeader>
-				<CardTitle>Container Settings</CardTitle>
+				<CardTitle>Server Settings</CardTitle>
 			</CardHeader>
 			<CardContent>
 				{#if error}
@@ -158,7 +158,7 @@
 				{:else if !selectedNode}
 					<p class="text-sm text-zinc-400">Agent not found.</p>
 				{:else if !selectedNode.connected}
-					<p class="text-sm text-zinc-400">Start the agent before creating containers.</p>
+					<p class="text-sm text-zinc-400">Start the agent before creating servers.</p>
 				{:else}
 					<form class="space-y-5" method="POST" use:enhanceCreate>
 						<div class="grid gap-4 md:grid-cols-2">
@@ -259,7 +259,7 @@
 							<Button type="button" variant="outline" onclick={() => goto(`/nodes/${nodeID}`)}>Cancel</Button>
 							<Button type="submit" disabled={createSubmitting}>
 								<Plus size={16} />
-								Create
+								Create server
 							</Button>
 						</div>
 					</form>

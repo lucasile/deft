@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { Check, Clock3, Copy, KeyRound, LogOut, RefreshCw } from '@lucide/svelte';
+	import { Check, Clock3, Copy, KeyRound, LogOut, Plus, RefreshCw } from '@lucide/svelte';
 	import { auth, panel, type JoinTokenInfo, type Node, type PanelEventPayload, type Server } from '$lib/api/client';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { Badge } from '$lib/components/ui/badge';
@@ -170,6 +170,14 @@
 		goto(`/servers/${serverID}`);
 	};
 
+	const createServer = () => {
+		if (onlineNodes.length === 1) {
+			goto(`/nodes/${onlineNodes[0].id}/containers/new`);
+			return;
+		}
+		goto('/servers/new');
+	};
+
 	const isDuplicateNodeName = (node: Node) => {
 		return (duplicateNodeNames[node.name || node.id] ?? 0) > 1;
 	};
@@ -243,16 +251,31 @@
 					<CardTitle>Servers</CardTitle>
 					<p class="text-sm text-zinc-400">{servers.length} known</p>
 				</div>
-				<Button type="button" variant="outline" size="sm" disabled={serversLoading} onclick={() => void loadServers()}>
-					<RefreshCw size={15} />
-					Refresh
-				</Button>
+				<div class="flex gap-2">
+					<Button type="button" size="sm" disabled={onlineNodes.length === 0} onclick={createServer}>
+						<Plus size={15} />
+						Create server
+					</Button>
+					<Button type="button" variant="outline" size="sm" disabled={serversLoading} onclick={() => void loadServers()}>
+						<RefreshCw size={15} />
+						Refresh
+					</Button>
+				</div>
 			</CardHeader>
 
 			{#if serversLoading && servers.length === 0}
 				<CardContent class="py-8 text-sm text-zinc-400">Loading servers...</CardContent>
 			{:else if sortedServers.length === 0}
-				<CardContent class="py-8 text-sm text-zinc-400">No servers have been created yet.</CardContent>
+				<CardContent class="space-y-3 py-8">
+					<p class="text-sm text-zinc-400">No servers have been created yet.</p>
+					<Button type="button" disabled={onlineNodes.length === 0} onclick={createServer}>
+						<Plus size={16} />
+						Create server
+					</Button>
+					{#if onlineNodes.length === 0}
+						<p class="text-xs text-zinc-500">Connect an agent before creating a server.</p>
+					{/if}
+				</CardContent>
 			{:else}
 				<div class="divide-y divide-zinc-800">
 					{#each sortedServers as server (server.id)}

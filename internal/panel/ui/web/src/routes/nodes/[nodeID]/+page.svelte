@@ -286,7 +286,7 @@
 					<div class="flex gap-2">
 						<Button type="button" size="sm" disabled={!selectedNode?.connected} onclick={() => goto(`/nodes/${nodeID}/containers/new`)}>
 							<Plus size={14} />
-							Create
+							Create server
 						</Button>
 						<Button type="button" variant="outline" size="sm" disabled={containersLoading} onclick={() => void loadContainers()}>
 							<RefreshCw size={14} />
