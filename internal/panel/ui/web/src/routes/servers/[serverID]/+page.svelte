@@ -37,6 +37,7 @@
 	let pendingActionCommandID = $state('');
 	let confirmAction = $state<'remove-server' | null>(null);
 	let logOutputElement = $state<HTMLPreElement | null>(null);
+	let consoleInputElement = $state<HTMLInputElement | null>(null);
 	let logEvents: EventSource | null = null;
 	let logDecoder = new TextDecoder();
 	let autoStartedLogForStatus = '';
@@ -258,6 +259,8 @@
 			consoleError = cleanError(err);
 		} finally {
 			consoleBusy = false;
+			await tick();
+			consoleInputElement?.focus();
 		}
 	};
 
@@ -504,6 +507,7 @@
 							}}
 						>
 							<input
+								bind:this={consoleInputElement}
 								class="h-10 w-full rounded-md border border-zinc-700 bg-black px-3 font-mono text-sm text-zinc-100 outline-none focus:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
 								placeholder="say Hello from Deft"
 								maxlength="512"
